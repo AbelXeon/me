@@ -1,0 +1,20 @@
+# Environment & secrets
+.env
+
+# Database
+database/*.sqlite
+database/*.sqlite-journal
+
+# Uploaded user content (media files shouldn't be in git)
+uploads/posts/*
+!uploads/posts/.htaccess
+!uploads/.gitkeep
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+
+# Dependencies (if you add composer later)
+vendor/

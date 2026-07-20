@@ -1,0 +1,28 @@
+# Allow Facebook/Instagram crawler to fetch media files for posting.
+# Without this, Meta's crawler cannot read your image and you get
+# "Only photo or video can be accepted as media type".
+
+<IfModule mod_headers.c>
+    Header set X-Robots-Tag "all"
+    Header set Access-Control-Allow-Origin "*"
+</IfModule>
+
+# Disable any PHP execution in the uploads folder (security).
+<FilesMatch "\.(php|phtml|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Make sure common extensions are served with the correct MIME type.
+<IfModule mod_mime.c>
+    AddType image/jpeg      .jpg .jpeg .jpe
+    AddType image/png       .png
+    AddType image/gif       .gif
+    AddType image/webp      .webp
+    AddType video/mp4       .mp4 .m4v
+    AddType video/quicktime .mov
+</IfModule>
+
+# Disable gzip so Meta's crawler reliably sees Content-Length.
+<IfModule mod_deflate.c>
+    SetEnvIfNoCase Request_URI "\.(jpg|jpeg|png|gif|webp|mp4|mov)$" no-gzip
+</IfModule>

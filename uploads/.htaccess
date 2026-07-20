@@ -1,0 +1,20 @@
+Options -Indexes
+Deny from all
+<FilesMatch "\.(jpg|jpeg|png|gif|mp4|mov|avi)$">
+    Allow from all
+</FilesMatch>
+
+# .htaccess in root folder
+RewriteEngine On
+
+# Redirect to login if not authenticated
+RewriteCond %{REQUEST_URI} !^/login.php
+RewriteCond %{REQUEST_URI} !^/logout.php
+RewriteCond %{REQUEST_URI} !^/assets/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ login.php [L]
+
+# Security headers
+Header set X-Content-Type-Options "nosniff"
+Header set X-Frame-Options "DENY"
+Header set X-XSS-Protection "1; mode=block"

@@ -1,0 +1,24 @@
+CREATE TABLE `social_posts_queue` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `caption` TEXT NOT NULL,
+  `media_url` VARCHAR(512) NOT NULL,
+  `media_type` ENUM('image', 'video') NOT NULL,
+  
+  -- Step tracking switches (1 = send to this app, 0 = skip this app)
+  `target_telegram` TINYINT(1) DEFAULT 0,
+  `target_facebook` TINYINT(1) DEFAULT 0,
+  `target_linkedin` TINYINT(1) DEFAULT 0,
+  `target_tiktok` TINYINT(1) DEFAULT 0,
+  
+  -- Ongoing workflow states for each app individual pipeline
+  `status_telegram` ENUM('pending', 'processing', 'success', 'failed') DEFAULT 'pending',
+  `status_facebook` ENUM('pending', 'processing', 'success', 'failed') DEFAULT 'pending',
+  `status_linkedin` ENUM('pending', 'processing', 'success', 'failed') DEFAULT 'pending',
+  `status_tiktok`   ENUM('pending', 'processing', 'success', 'failed') DEFAULT 'pending',
+  
+  -- Space to save explicit API error logs if a connection drops
+  `error_log` TEXT DEFAULT NULL,
+  
+  `scheduled_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
