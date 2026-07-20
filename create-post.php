@@ -51,7 +51,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $allowed_video_mimes = ['video/mp4', 'video/quicktime'];
 
                 for ($i = 0; $i < $total_files; $i++) {
-                    if ($files['error'][$i] !== UPLOAD_ERR_OK) continue;
+                    // Check for explicit upload errors instead of silently skipping
+                    if ($files['error'][$i] !== UPLOAD_ERR_OK) {
+                        $error_codes = [
+                            UPLOAD_ERR_INI_SIZE   => "The file is too large (exceeds PHP's limit).",
+                            UPLOAD_ERR_FORM_SIZE  => "The file exceeds the HTML form limit.",
+                            UPLOAD_ERR_PARTIAL    => "The file was only partially uploaded.",
+                            UPLOAD_ERR_NO_FILE    => "No file was uploaded.",
+                            UPLOAD_ERR_NO_TMP_DIR => "Missing a temporary folder on the server.",
+                            UPLOAD_ERR_CANT_WRITE => "Failed to write file to disk (permission issue).",
+                            UPLOAD_ERR_EXTENSION  => "A PHP extension stopped the file upload."
+                        ];
+                        $err_msg = $error_codes[$files['error'][$i]] ?? "Unknown upload error code: " . $files['error'][$i];
+                        throw new Exception("File " . ($i+1) . " upload failed: " . $err_msg);
+                    }
 
                     $finfo = finfo_open(FILEINFO_MIME_TYPE);
                     $detected_mime = finfo_file($finfo, $files['tmp_name'][$i]);
@@ -73,12 +86,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt = $conn->prepare("INSERT INTO media_files (path, type, size, mime_type, uploaded_by) VALUES (?, ?, ?, ?, ?)");
                         $stmt->execute([$relative_path, $media_type, $files['size'][$i], $detected_mime, $user_id]);
                         $uploaded_media_ids[] = $conn->lastInsertId();
+                    } else {
+                        throw new Exception("Failed to move the uploaded file " . ($i+1) . " to the destination directory.");
                     }
                 }
 
-                // DEFENSIVE CHECK: Make sure at least one file was successfully uploaded
                 if (empty($uploaded_media_ids)) {
-                    throw new Exception("Failed to upload files. Please make sure the server has permission to write to the uploads directory.");
+                    throw new Exception("No files were successfully processed.");
                 }
 
                 $primary_media_id = $uploaded_media_ids[0];

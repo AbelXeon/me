@@ -4,16 +4,20 @@ FROM php:8.2-apache
 RUN apt-get update && apt-get install -y libpq-dev \
     && docker-php-ext-install pdo pdo_pgsql
 
-# 2. Tell Apache to expose your Render environment variables to PHP
+# 2. Increase PHP upload limits to 50MB (Crucial for photos/videos)
+RUN echo "upload_max_filesize = 50M" > /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "post_max_size = 50M" >> /usr/local/etc/php/conf.d/uploads.ini
+
+# 3. Tell Apache to expose your Render environment variables to PHP
 RUN echo "PassEnv DB_DRIVER DB_HOST DB_PORT DB_NAME DB_USER DB_PASS TOKEN_ENCRYPTION_KEY TELEGRAM_BOT_TOKEN TIKTOK_REDIRECT_URI" > /etc/apache2/conf-enabled/expose-env.conf
 
-# 3. Copy your project files to the Apache web directory
+# 4. Copy your project files to the Apache web directory
 COPY . /var/www/html/
 
-# 4. Give Apache (www-data) ownership of the directory so it can save uploaded files
+# 5. Give Apache (www-data) ownership of the directory so it can save uploaded files
 RUN chown -R www-data:www-data /var/www/html
 
-# 5. Enable Apache mod_rewrite
+# 6. Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
 # Expose the standard web port
