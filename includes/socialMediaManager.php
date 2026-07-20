@@ -4,16 +4,20 @@
 class SocialMediaManager {
     private $db;
 
-   public function __construct($pdo) {
-    $this->db = $pdo;
-    
-    // If running from cron.php, $_ENV might be empty, so we load it
-    if (!isset($_ENV['TELEGRAM_BOT_TOKEN'])) {
-        require_once __DIR__ . '/env.php'; 
+    public function __construct($pdo) {
+        $this->db = $pdo;
+        
+        // If running from cron.php, $_ENV might be empty, so we load it
+        if (!isset($_ENV['TELEGRAM_BOT_TOKEN'])) {
+            require_once __DIR__ . '/env.php'; 
+        }
     }
-}
+
+    /**
+     * Main function to process a post for all selected platforms
+     */
     public function sendPost($postId) {
-        // Updated query to include external_link
+        // 1. Fetch post details
         $stmt = $this->db->prepare("
             SELECT p.*, m.path as media_path, m.type as media_file_type 
             FROM posts p 
@@ -25,6 +29,7 @@ class SocialMediaManager {
 
         if (!$post) return false;
 
+        // 2. Fetch platforms for this post that are 'pending'
         $stmt = $this->db->prepare("SELECT platform FROM post_platforms WHERE post_id = ? AND status = 'pending'");
         $stmt->execute([$postId]);
         $platforms = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -36,8 +41,11 @@ class SocialMediaManager {
 
             if ($platform === 'telegram') {
                 $success = $this->postToTelegram($post, $platform_post_id, $error_message);
-            } 
+            } elseif ($platform === 'tiktok') {
+                $success = $this->postToTikTok($post, $platform_post_id, $error_message);
+            }
 
+            // 3. Update status in database (posted or failed)
             $status = $success ? 'posted' : 'failed';
             $stmtUpdate = $this->db->prepare("
                 UPDATE post_platforms 
@@ -47,7 +55,7 @@ class SocialMediaManager {
             $stmtUpdate->execute([$status, $platform_post_id, $error_message, $postId, $platform]);
         }
 
-        // Final status updates
+        // 4. Update main post status if all platforms are processed
         $stmtCheck = $this->db->prepare("SELECT COUNT(*) FROM post_platforms WHERE post_id = ? AND status = 'pending'");
         $stmtCheck->execute([$postId]);
         if ($stmtCheck->fetchColumn() == 0) {
@@ -60,6 +68,9 @@ class SocialMediaManager {
         }
     }
 
+    /**
+     * Publishes text and media to Telegram Channels
+     */
     private function postToTelegram($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'telegram' AND status = 1");
         $stmt->execute([$post['user_id']]);
@@ -127,12 +138,9 @@ class SocialMediaManager {
         curl_close($ch);
 
         if (isset($result['ok']) && $result['ok']) {
-            // Check if result is a list (Album) or a single object (Photo/Video)
             if (isset($result['result'][0]['message_id'])) {
-                // It's an album, take the ID of the first message
                 $platform_post_id = $result['result'][0]['message_id'];
             } else {
-                // It's a single post
                 $platform_post_id = $result['result']['message_id'] ?? null;
             }
             return true;
@@ -142,5 +150,78 @@ class SocialMediaManager {
         return false;
     }
 
-  
+    /**
+     * Publishes a video to TikTok's Content Posting API v2
+     */
+    private function postToTikTok($post, &$platform_post_id, &$error_message) {
+        $stmt = $this->db->prepare("SELECT access_token FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
+        $stmt->execute([$post['user_id']]);
+        $account = $stmt->fetch();
+
+        if (!$account) {
+            $error_message = "TikTok account not connected.";
+            return false;
+        }
+
+        // TikTok strictly only accepts video files
+        if ($post['media_file_type'] !== 'video') {
+            $error_message = "TikTok only supports video uploads.";
+            return false;
+        }
+
+        // Dynamically get your verified domain from the TIKTOK_REDIRECT_URI environment variable
+        $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
+        $parsedUrl = parse_url($redirectUri);
+        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+        $absoluteVideoUrl = $scheme . '://' . $host . '/' . $post['media_path'];
+
+        $accessToken = $account['access_token'];
+
+        // Build Content Posting API v2 Payload
+        $payload = [
+            'post_info' => [
+                'title' => $post['caption'], // TikTok description/caption goes here
+                'privacy_level' => 'SELF_ONLY', // SELF_ONLY is required for sandbox testing [1.2.4]
+                'disable_duet' => false,
+                'disable_stitch' => false,
+                'disable_comment' => false
+            ],
+            'source_info' => [
+                'source' => 'PULL_FROM_URL',
+                'video_url' => $absoluteVideoUrl
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/post/publish/video/init/");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer {$accessToken}",
+            "Content-Type: application/json; charset=UTF-8"
+        ]);
+
+        $response = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+
+        if ($err) {
+            $error_message = "CURL Error: " . $err;
+            return false;
+        }
+
+        $result = json_decode($response, true);
+        
+        // Parse TikTok success/error response codes
+        if (isset($result['error']) && $result['error']['code'] === 'ok') {
+            $platform_post_id = $result['data']['publish_id'] ?? null;
+            return true;
+        }
+
+        $error_message = $result['error']['message'] ?? 'TikTok API Error';
+        return false;
+    }
 }
