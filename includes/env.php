@@ -3,17 +3,13 @@
 
 function loadEnv($path)
 {
-    // If we are on a cloud host like Render, the environment variables 
-    // are already loaded in the system, so we do not need the physical .env file!
-    if (getenv('DB_DRIVER') !== false || isset($_ENV['DB_DRIVER'])) {
+    // If the .env file does not exist (like on Render), we do NOT crash.
+    // We just return gracefully and let Render's system environment variables work!
+    if (!file_exists($path)) {
         return; 
     }
 
-    // Otherwise, if we are local and there is no .env file, show the error
-    if (!file_exists($path)) {
-        die(".env file not found. Copy .env.example to .env and fill in your values.");
-    }
-
+    // If the file exists (like on your localhost), we load it
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
     foreach ($lines as $line) {
