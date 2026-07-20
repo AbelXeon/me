@@ -10,7 +10,10 @@ RUN echo "PassEnv DB_DRIVER DB_HOST DB_PORT DB_NAME DB_USER DB_PASS TOKEN_ENCRYP
 # 3. Copy your project files to the Apache web directory
 COPY . /var/www/html/
 
-# 4. Enable Apache mod_rewrite (so your htaccess files work if you use them)
+# 4. Give Apache (www-data) ownership of the directory so it can save uploaded files
+RUN chown -R www-data:www-data /var/www/html
+
+# 5. Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
 # Expose the standard web port

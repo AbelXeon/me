@@ -26,13 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $caption = trim($_POST['caption'] ?? '');
         $title = trim($_POST['title'] ?? '');
-        $external_link = trim($_POST['external_link'] ?? ''); // This captures the links
+        $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
+        
         if (!empty($scheduled_at)) {
-    // Convert 2023-10-27T10:00 to 2023-10-27 10:00:00 for the database
-    $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
-}
+            $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
+        }
 
         if (empty($caption)) {
             $error = 'Caption cannot be empty';
@@ -76,6 +76,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // DEFENSIVE CHECK: Make sure at least one file was successfully uploaded
+                if (empty($uploaded_media_ids)) {
+                    throw new Exception("Failed to upload files. Please make sure the server has permission to write to the uploads directory.");
+                }
+
                 $primary_media_id = $uploaded_media_ids[0];
                 $stmtMedia = $conn->prepare("SELECT type FROM media_files WHERE id = ?");
                 $stmtMedia->execute([$primary_media_id]);
@@ -84,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_scheduled = !empty($scheduled_at);
                 $post_status = $is_scheduled ? 'scheduled' : 'draft';
 
-                // INSERT statement with external_link column
                 $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null]);
                 $post_id = $conn->lastInsertId();
@@ -114,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             } catch (Exception $e) {
                 if ($conn->inTransaction()) $conn->rollBack();
-                $error = 'Error: ' . $e->getMessage();
+                $error = $e->getMessage();
             }
         }
     }
@@ -164,7 +168,6 @@ $platform_meta = [
                 <textarea id="caption" name="caption" rows="5" required><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
             </div>
 
-            <!-- MULTI-LINK SECTION -->
             <div class="form-group">
                 <label for="external_link">Links (Optional)</label>
                 <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
