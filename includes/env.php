@@ -1,7 +1,15 @@
 <?php
 // includes/env.php
+
 function loadEnv($path)
 {
+    // If we are on a cloud host like Render, the environment variables 
+    // are already loaded in the system, so we do not need the physical .env file!
+    if (getenv('DB_DRIVER') !== false || isset($_ENV['DB_DRIVER'])) {
+        return; 
+    }
+
+    // Otherwise, if we are local and there is no .env file, show the error
     if (!file_exists($path)) {
         die(".env file not found. Copy .env.example to .env and fill in your values.");
     }
