@@ -32,12 +32,12 @@ if ($platform === 'tiktok') {
     $redirectUri = getenv('FB_REDIRECT_URI');
     $state = $_SESSION['oauth_state'];
     
-    // Meta permissions required for Page Posting and Instagram Linking
+    // FIXED: Only request unblocked Instagram and basic Page scopes for Consumer apps
     $scopes = [
         'public_profile',
         'pages_show_list',
-        'pages_manage_posts',
-        'pages_read_engagement'
+        'instagram_basic',
+        'instagram_content_publish'
     ];
 
     $authUrl = "https://www.facebook.com/v18.0/dialog/oauth/?" . http_build_query([
@@ -45,8 +45,7 @@ if ($platform === 'tiktok') {
         'redirect_uri'  => $redirectUri,
         'scope'         => implode(',', $scopes),
         'state'         => $state,
-        'response_type' => 'code',
-        'auth_type'     => 'rerequest' // FIXED: Forces Facebook to show the Page Selection checkboxes again!
+        'response_type' => 'code'
     ]);
 
     header("Location: " . $authUrl);
