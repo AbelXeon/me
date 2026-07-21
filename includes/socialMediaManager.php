@@ -73,6 +73,21 @@ class SocialMediaManager {
     }
 
     /**
+     * Helper to fetch all media files associated with a post (Primary + Extras)
+     */
+    private function getPostMediaItems($post) {
+        $stmtMedia = $this->db->prepare("
+            SELECT path, type FROM media_files WHERE id = ?
+            UNION ALL
+            SELECT m.path, m.type FROM media_files m 
+            JOIN post_extra_media pem ON m.id = pem.media_id 
+            WHERE pem.post_id = ?
+        ");
+        $stmtMedia->execute([$post['media_id'], $post['id']]);
+        return $stmtMedia->fetchAll();
+    }
+
+    /**
      * Publishes text and media to Telegram Channels
      */
     private function postToTelegram($post, &$platform_post_id, &$error_message) {
@@ -85,22 +100,12 @@ class SocialMediaManager {
             return false;
         }
 
-        // Clean link format (no emojis or "Links:" prefix)
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
             $finalCaption .= "\n\n" . $post['external_link'];
         }
 
-        $stmtMedia = $this->db->prepare("
-            SELECT path, type FROM media_files WHERE id = ?
-            UNION ALL
-            SELECT m.path, m.type FROM media_files m 
-            JOIN post_extra_media pem ON m.id = pem.media_id 
-            WHERE pem.post_id = ?
-        ");
-        $stmtMedia->execute([$post['media_id'], $post['id']]);
-        $mediaItems = $stmtMedia->fetchAll();
-
+        $mediaItems = $this->getPostMediaItems($post);
         $botToken = $account['access_token'];
         $chatId = $account['platform_user_id'];
         
@@ -188,7 +193,7 @@ class SocialMediaManager {
         $payload = [
             'post_info' => [
                 'title' => $finalCaption,
-                'privacy_level' => 'SELF_ONLY', // Required for sandbox testing
+                'privacy_level' => 'SELF_ONLY',
                 'disable_duet' => false,
                 'disable_stitch' => false,
                 'disable_comment' => false
@@ -231,7 +236,7 @@ class SocialMediaManager {
     }
 
     /**
-     * Publishes text and media directly to Facebook Page Feed
+     * Publishes text and media (single or album) directly to Facebook Page Feed
      */
     private function postToFacebook($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'facebook' AND status = 1");
@@ -248,61 +253,119 @@ class SocialMediaManager {
 
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
-            $finalCaption .= "\n\n" . $post['external_link']; // Fixed: Removed "🔗 Links:"
+            $finalCaption .= "\n\n" . $post['external_link'];
         }
 
+        $mediaItems = $this->getPostMediaItems($post);
+
+        // Dynamically get your verified domain
         $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-        $absoluteMediaUrl = $scheme . '://' . $host . '/' . $post['media_path'];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_POST, 1);
+        // CASE 1: SINGLE MEDIA POST (Photo or Video)
+        if (count($mediaItems) === 1) {
+            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_POST, 1);
 
-        if ($post['media_file_type'] === 'video') {
-            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/videos");
-            curl_setopt($ch, CURLOPT_POSTFIELDS, [
-                'file_url'     => $absoluteMediaUrl,
-                'description'  => $finalCaption,
-                'access_token' => $pageAccessToken
-            ]);
-        } else {
-            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/photos");
-            curl_setopt($ch, CURLOPT_POSTFIELDS, [
-                'url'          => $absoluteMediaUrl,
-                'message'      => $finalCaption,
-                'access_token' => $pageAccessToken
-            ]);
-        }
+            if ($mediaItems[0]['type'] === 'video') {
+                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/videos");
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'file_url'     => $absoluteMediaUrl,
+                    'description'  => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            } else {
+                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/photos");
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'url'          => $absoluteMediaUrl,
+                    'message'      => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            }
 
-        $response = curl_exec($ch);
-        $err = curl_error($ch);
-        curl_close($ch);
+            $response = curl_exec($ch);
+            $result = json_decode($response, true);
+            curl_close($ch);
 
-        if ($err) {
-            $error_message = "CURL Error: " . $err;
+            if (isset($result['id']) || isset($result['post_id'])) {
+                $platform_post_id = $result['post_id'] ?? ($result['id'] ?? null);
+                return true;
+            }
+
+            $error_message = $result['error']['message'] ?? 'Facebook API Error';
             return false;
         }
 
-        $result = json_decode($response, true);
+        // CASE 2: MULTI-PHOTO ALBUM POST (Requires 2-step process)
+        try {
+            $attachedMediaIds = [];
 
-        if (isset($result['id']) || isset($result['post_id'])) {
-            $platform_post_id = $result['post_id'] ?? ($result['id'] ?? null);
-            return true;
+            // Step A: Upload each photo individually with published=false
+            foreach ($mediaItems as $item) {
+                if ($item['type'] === 'video') continue; // Albums in Facebook API only support photos for simple tests
+
+                $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/photos");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_POST, 1);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'url'          => $absoluteMediaUrl,
+                    'published'    => 'false',
+                    'access_token' => $pageAccessToken
+                ]);
+                $response = curl_exec($ch);
+                curl_close($ch);
+
+                $res = json_decode($response, true);
+                if (isset($res['id'])) {
+                    $attachedMediaIds[] = ['media_fbid' => $res['id']];
+                }
+            }
+
+            if (empty($attachedMediaIds)) {
+                throw new Exception("Failed to prepare any media files for the Facebook Album.");
+            }
+
+            // Step B: Publish the final post linking all the uploaded photo IDs
+            $chPublish = curl_init();
+            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/feed");
+            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chPublish, CURLOPT_POST, 1);
+            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+                'message'        => $finalCaption,
+                'attached_media' => json_encode($attachedMediaIds),
+                'access_token'   => $pageAccessToken
+            ]);
+            $publishResponse = curl_exec($chPublish);
+            curl_close($chPublish);
+
+            $publishResult = json_decode($publishResponse, true);
+            if (isset($publishResult['id'])) {
+                $platform_post_id = $publishResult['id'];
+                return true;
+            }
+
+            $error_message = $publishResult['error']['message'] ?? 'Failed to publish Facebook Album.';
+            return false;
+
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+            return false;
         }
-
-        $error_message = $result['error']['message'] ?? 'Facebook API Error';
-        return false;
     }
 
     /**
-     * Publishes images/videos directly to linked Instagram Business Accounts
+     * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
      */
     private function postToInstagram($post, &$platform_post_id, &$error_message) {
-        // Instagram uses your Facebook Page Access Token to publish content!
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
         $stmt->execute([$post['user_id']]);
         $account = $stmt->fetch();
@@ -320,77 +383,154 @@ class SocialMediaManager {
             $finalCaption .= "\n\n" . $post['external_link'];
         }
 
-        // Dynamically get your verified domain
+        $mediaItems = $this->getPostMediaItems($post);
+
         $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-        $absoluteMediaUrl = $scheme . '://' . $host . '/' . $post['media_path'];
 
-        $is_video = ($post['media_file_type'] === 'video');
+        // CASE 1: SINGLE MEDIA POST (Photo or Video Reels)
+        if (count($mediaItems) === 1) {
+            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+            $is_video = ($mediaItems[0]['type'] === 'video');
 
-        // STEP 1: Create the media container on Instagram
-        $chContainer = curl_init();
-        curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-        curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chContainer, CURLOPT_POST, 1);
+            $chContainer = curl_init();
+            curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+            curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chContainer, CURLOPT_POST, 1);
 
-        if ($is_video) {
-            // Instagram Reels container
-            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                'media_type'   => 'REELS',
-                'video_url'    => $absoluteMediaUrl,
-                'caption'      => $finalCaption,
+            if ($is_video) {
+                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                    'media_type'   => 'REELS',
+                    'video_url'    => $absoluteMediaUrl,
+                    'caption'      => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            } else {
+                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                    'image_url'    => $absoluteMediaUrl,
+                    'caption'      => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            }
+
+            $containerResponse = curl_exec($chContainer);
+            $containerResult = json_decode($containerResponse, true);
+            curl_close($chContainer);
+
+            $creationId = $containerResult['id'] ?? null;
+            if (!$creationId) {
+                $error_message = "IG Container Error: " . ($containerResult['error']['message'] ?? 'Unknown');
+                return false;
+            }
+
+            if ($is_video) {
+                sleep(10); // Wait for Instagram to download and process the video file
+            }
+
+            $chPublish = curl_init();
+            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chPublish, CURLOPT_POST, 1);
+            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+                'creation_id'  => $creationId,
                 'access_token' => $pageAccessToken
             ]);
-        } else {
-            // Instagram Image container
-            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                'image_url'    => $absoluteMediaUrl,
-                'caption'      => $finalCaption,
-                'access_token' => $pageAccessToken
-            ]);
-        }
+            $publishResponse = curl_exec($chPublish);
+            $publishResult = json_decode($publishResponse, true);
+            curl_close($chPublish);
 
-        $containerResponse = curl_exec($chContainer);
-        curl_close($chContainer);
+            if (isset($publishResult['id'])) {
+                $platform_post_id = $publishResult['id'];
+                return true;
+            }
 
-        $containerResult = json_decode($containerResponse, true);
-        $creationId = $containerResult['id'] ?? null;
-
-        if (!$creationId) {
-            $error_message = "Instagram Container Error: " . ($containerResult['error']['message'] ?? 'Unknown error');
+            $error_message = "IG Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
             return false;
         }
 
-        // STEP 2: If video (Reels), wait 10 seconds for Instagram's video processors to download and approve the file
-        if ($is_video) {
-            sleep(10);
+        // CASE 2: MULTI-PHOTO CAROUSEL POST
+        try {
+            $carouselItemIds = [];
+
+            // Step A: Create container for each carousel item (only photos supported for basic tests)
+            foreach ($mediaItems as $item) {
+                if ($item['type'] === 'video') continue;
+
+                $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_POST, 1);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'image_url'        => $absoluteMediaUrl,
+                    'is_carousel_item' => 'true',
+                    'access_token'     => $pageAccessToken
+                ]);
+                $response = curl_exec($ch);
+                curl_close($ch);
+
+                $res = json_decode($response, true);
+                if (isset($res['id'])) {
+                    $carouselItemIds[] = $res['id'];
+                }
+            }
+
+            if (count($carouselItemIds) < 2) {
+                throw new Exception("Instagram Carousel requires at least 2 images.");
+            }
+
+            // Step B: Create main carousel container
+            $chMain = curl_init();
+            curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+            curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chMain, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chMain, CURLOPT_POST, 1);
+            curl_setopt($chMain, CURLOPT_POSTFIELDS, [
+                'media_type'   => 'CAROUSEL',
+                'children'     => json_encode($carouselItemIds),
+                'caption'      => $finalCaption,
+                'access_token' => $pageAccessToken
+            ]);
+            $mainResponse = curl_exec($chMain);
+            curl_close($chMain);
+
+            $mainResult = json_decode($mainResponse, true);
+            $creationId = $mainResult['id'] ?? null;
+
+            if (!$creationId) {
+                throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
+            }
+
+            // Step C: Publish the main carousel
+            $chPublish = curl_init();
+            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chPublish, CURLOPT_POST, 1);
+            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+                'creation_id'  => $creationId,
+                'access_token' => $pageAccessToken
+            ]);
+            $publishResponse = curl_exec($chPublish);
+            $publishResult = json_decode($publishResponse, true);
+            curl_close($chPublish);
+
+            if (isset($publishResult['id'])) {
+                $platform_post_id = $publishResult['id'];
+                return true;
+            }
+
+            $error_message = "IG Carousel Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
+            return false;
+
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+            return false;
         }
-
-        // STEP 3: Publish the container
-        $chPublish = curl_init();
-        curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
-        curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chPublish, CURLOPT_POST, 1);
-        curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
-            'creation_id'  => $creationId,
-            'access_token' => $pageAccessToken
-        ]);
-
-        $publishResponse = curl_exec($chPublish);
-        curl_close($chPublish);
-
-        $publishResult = json_decode($publishResponse, true);
-
-        if (isset($publishResult['id'])) {
-            $platform_post_id = $publishResult['id'];
-            return true;
-        }
-
-        $error_message = "Instagram Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown error');
-        return false;
     }
 }
