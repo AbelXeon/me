@@ -32,10 +32,12 @@ if ($platform === 'tiktok') {
     $redirectUri = getenv('FB_REDIRECT_URI');
     $state = $_SESSION['oauth_state'];
     
-    // FIXED: Only request unblocked Instagram and basic Page scopes for Consumer apps
+    // Standard Business Scopes (Pages + Instagram)
     $scopes = [
         'public_profile',
         'pages_show_list',
+        'pages_manage_posts',
+        'pages_read_engagement',
         'instagram_basic',
         'instagram_content_publish'
     ];
@@ -45,7 +47,8 @@ if ($platform === 'tiktok') {
         'redirect_uri'  => $redirectUri,
         'scope'         => implode(',', $scopes),
         'state'         => $state,
-        'response_type' => 'code'
+        'response_type' => 'code',
+        'auth_type'     => 'rerequest'
     ]);
 
     header("Location: " . $authUrl);
