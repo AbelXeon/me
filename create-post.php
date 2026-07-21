@@ -13,6 +13,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+// Get this user's connected platforms
 $stmt = $conn->prepare("SELECT platform, account_name FROM social_accounts WHERE user_id = ? AND status = 1");
 $stmt->execute([$user_id]);
 $connected = [];
@@ -82,8 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (move_uploaded_file($files['tmp_name'][$i], $upload_dir . $new_filename)) {
                         $relative_path = 'uploads/posts/' . $new_filename;
-                        
-                        // FORCE FILE PERMISSION TO BE PUBLICLY READABLE (0644)
                         chmod($upload_dir . $new_filename, 0644); 
                         
                         $stmt = $conn->prepare("INSERT INTO media_files (path, type, size, mime_type, uploaded_by) VALUES (?, ?, ?, ?, ?)");
@@ -141,11 +140,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// FIXED: Added 'instagram' here so the checkbox renders on the page
 $platform_meta = [
-    'facebook' => ['icon' => '📘', 'label' => 'Facebook'],
-    'telegram' => ['icon' => '✈️', 'label' => 'Telegram'],
-    'linkedin' => ['icon' => '💼', 'label' => 'LinkedIn'],
-    'tiktok'   => ['icon' => '🎵', 'label' => 'TikTok'],
+    'facebook'  => ['icon' => '📘', 'label' => 'Facebook'],
+    'instagram' => ['icon' => '📸', 'label' => 'Instagram'],
+    'telegram'  => ['icon' => '✈️', 'label' => 'Telegram'],
+    'linkedin'  => ['icon' => '💼', 'label' => 'LinkedIn'],
+    'tiktok'    => ['icon' => '🎵', 'label' => 'TikTok'],
 ];
 ?>
 <!DOCTYPE html>
@@ -172,49 +173,57 @@ $platform_meta = [
         <?php if ($error) echo "<div class='alert alert-error'>".htmlspecialchars($error)."</div>"; ?>
         <?php if ($success) echo "<div class='alert alert-success'>".htmlspecialchars($success)."</div>"; ?>
 
-        <form method="POST" action="" enctype="multipart/form-data">
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-
-            <div class="form-group">
-                <label for="title">Internal Title (Optional)</label>
-                <input type="text" id="title" name="title" value="<?php echo htmlspecialchars($_POST['title'] ?? ''); ?>">
+        <?php if (empty($connected)): ?>
+            <div class="alert alert-warning">
+                You haven't connected any platforms yet. <a href="settings.php">Go connect one first →</a>
             </div>
+        <?php else: ?>
+            <form method="POST" action="" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
-            <div class="form-group">
-                <label for="caption">Caption</label>
-                <textarea id="caption" name="caption" rows="5" required><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="external_link">Links (Optional)</label>
-                <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
-                <small>Links will be appended to the end of the post.</small>
-            </div>
-
-            <div class="form-group">
-                <label for="media">Media (Select one or multiple)</label>
-                <input type="file" id="media" name="media[]" accept="image/*,video/*" multiple required>
-            </div>
-
-            <div class="form-group">
-                <label>Post to</label>
-                <div class="platform-checkboxes">
-                    <?php foreach ($connected as $platform => $account_name): ?>
-                        <label class="platform-checkbox">
-                            <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
-                            <span><?php echo $platform_meta[$platform]['icon']; ?> <?php echo htmlspecialchars($platform_meta[$platform]['label']); ?></span>
-                        </label>
-                    <?php endforeach; ?>
+                <div class="form-group">
+                    <label for="title">Internal Title (Optional)</label>
+                    <input type="text" id="title" name="title" value="<?php echo htmlspecialchars($_POST['title'] ?? ''); ?>">
                 </div>
-            </div>
 
-            <div class="form-group">
-                <label for="scheduled_at">Schedule for later</label>
-                <input type="datetime-local" id="scheduled_at" name="scheduled_at">
-            </div>
+                <div class="form-group">
+                    <label for="caption">Caption</label>
+                    <textarea id="caption" name="caption" rows="5" required><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
+                </div>
 
-            <button type="submit" class="btn-primary">Save & Publish</button>
-        </form>
+                <div class="form-group">
+                    <label for="external_link">Links (Optional)</label>
+                    <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
+                    <small>Links will be appended to the end of the post.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="media">Media (Select one or multiple)</label>
+                    <input type="file" id="media" name="media[]" accept="image/*,video/*" multiple required>
+                </div>
+
+                <div class="form-group">
+                    <label>Post to</label>
+                    <div class="platform-checkboxes">
+                        <?php foreach ($connected as $platform => $account_name): ?>
+                            <?php if (isset($platform_meta[$platform])): ?>
+                                <label class="platform-checkbox">
+                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
+                                    <span><?php echo $platform_meta[$platform]['icon']; ?> <?php echo htmlspecialchars($platform_meta[$platform]['label']); ?> (<?php echo htmlspecialchars($account_name); ?>)</span>
+                                </label>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="scheduled_at">Schedule for later</label>
+                    <input type="datetime-local" id="scheduled_at" name="scheduled_at">
+                </div>
+
+                <button type="submit" class="btn-primary">Save & Publish</button>
+            </form>
+        <?php endif; ?>
     </div>
 </body>
 </html>
