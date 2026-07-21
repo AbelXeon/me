@@ -181,8 +181,8 @@ class SocialMediaManager {
         // Build Content Posting API v2 Payload
         $payload = [
             'post_info' => [
-                'title' => $post['caption'], // TikTok description/caption goes here
-                'privacy_level' => 'SELF_ONLY', // SELF_ONLY is required for sandbox testing [1.2.4]
+                'title' => $post['caption'], 
+                'privacy_level' => 'SELF_ONLY', // CRUCIAL FIX: Required for un-audited sandbox accounts
                 'disable_duet' => false,
                 'disable_stitch' => false,
                 'disable_comment' => false
