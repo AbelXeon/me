@@ -28,7 +28,7 @@ $redirectUri = getenv('FB_REDIRECT_URI');
 
 // 2. Exchange the temporary code for a Short-Lived User Access Token
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/oauth/access_token?" . http_build_query([
+curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/oauth/access_token?" . http_build_query([
     'client_id'     => $appId,
     'redirect_uri'  => $redirectUri,
     'client_secret' => $appSecret,
@@ -43,14 +43,14 @@ $tokenData = json_decode($response, true);
 $userAccessToken = $tokenData['access_token'] ?? null;
 
 if (!$userAccessToken) {
-    $errorMsg = $tokenData['error']['message'] ?? 'User token exchange failed.';
-    header("Location: settings.php?error=" . urlencode($errorMsg));
+    echo "<h2>❌ Short-Lived Token Exchange Failed</h2>";
+    echo "<pre>" . htmlspecialchars(json_encode($tokenData, JSON_PRETTY_PRINT)) . "</pre>";
     exit();
 }
 
 // 3. Exchange Short-Lived User Token for a Long-Lived User Token (60 days)
 $chLong = curl_init();
-curl_setopt($chLong, CURLOPT_URL, "https://graph.facebook.com/v18.0/oauth/access_token?" . http_build_query([
+curl_setopt($chLong, CURLOPT_URL, "https://graph.facebook.com/oauth/access_token?" . http_build_query([
     'grant_type'        => 'fb_exchange_token',
     'client_id'         => $appId,
     'client_secret'     => $appSecret,
@@ -65,13 +65,14 @@ $longTokenData = json_decode($longResponse, true);
 $longLivedUserToken = $longTokenData['access_token'] ?? null;
 
 if (!$longLivedUserToken) {
-    header("Location: settings.php?error=long_lived_token_failed");
+    echo "<h2>❌ Long-Lived Token Exchange Failed</h2>";
+    echo "<pre>" . htmlspecialchars(json_encode($longTokenData, JSON_PRETTY_PRINT)) . "</pre>";
     exit();
 }
 
-// 4. Fetch the Facebook Pages owned by this user
+// 4. Fetch the Facebook Pages owned by this user (Removed strict v18.0 path for compatibility)
 $chPages = curl_init();
-curl_setopt($chPages, CURLOPT_URL, "https://graph.facebook.com/v18.0/me/accounts?access_token=" . urlencode($longLivedUserToken));
+curl_setopt($chPages, CURLOPT_URL, "https://graph.facebook.com/me/accounts?access_token=" . urlencode($longLivedUserToken));
 curl_setopt($chPages, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($chPages, CURLOPT_SSL_VERIFYPEER, false);
 $pagesResponse = curl_exec($chPages);
@@ -80,24 +81,30 @@ curl_close($chPages);
 $pagesData = json_decode($pagesResponse, true);
 $pages = $pagesData['data'] ?? [];
 
+// DEBUG CHECK: If pages is empty, output raw API results instead of redirecting
 if (empty($pages)) {
-    header("Location: settings.php?error=" . urlencode("No Facebook Pages found. You must create a Facebook Page first."));
+    echo "<h2>🔍 No Facebook Pages Found (Debug Mode)</h2>";
+    echo "<p>Authentication succeeded, but the Page list request returned empty or threw an error.</p>";
+    echo "<h3>Facebook Pages API Response:</h3>";
+    echo "<pre>" . htmlspecialchars(json_encode($pagesData, JSON_PRETTY_PRINT)) . "</pre>";
+    echo "<h3>Token Exchange Response:</h3>";
+    echo "<pre>" . htmlspecialchars(json_encode($longTokenData, JSON_PRETTY_PRINT)) . "</pre>";
+    echo "<br><br><a href='settings.php'>Go back to Settings</a>";
     exit();
 }
 
 // Automatically connect the first Page found
 $targetPage = $pages[0];
-$pageAccessToken = $targetPage['access_token']; // Page specific token that never expires!
+$pageAccessToken = $targetPage['access_token']; 
 $pageId = $targetPage['id'];
 $pageName = $targetPage['name'];
 
-// --- NEW INSTAGRAM DETECTION CODE ---
+// 5. Query for Linked Instagram Account
 $instagramBusinessId = null;
 $instagramUsername = null;
 
-// Query the Facebook Page to see if it has a linked Instagram Business Account
 $chIg = curl_init();
-curl_setopt($chIg, CURLOPT_URL, "https://graph.facebook.com/v18.0/" . urlencode($pageId) . "?fields=instagram_business_account&access_token=" . urlencode($pageAccessToken));
+curl_setopt($chIg, CURLOPT_URL, "https://graph.facebook.com/" . urlencode($pageId) . "?fields=instagram_business_account&access_token=" . urlencode($pageAccessToken));
 curl_setopt($chIg, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($chIg, CURLOPT_SSL_VERIFYPEER, false);
 $igResponse = curl_exec($chIg);
@@ -108,9 +115,8 @@ $igData = json_decode($igResponse, true);
 if (isset($igData['instagram_business_account']['id'])) {
     $instagramBusinessId = $igData['instagram_business_account']['id'];
 
-    // Fetch the Instagram Username
     $chIgUser = curl_init();
-    curl_setopt($chIgUser, CURLOPT_URL, "https://graph.facebook.com/v18.0/" . urlencode($instagramBusinessId) . "?fields=username&access_token=" . urlencode($pageAccessToken));
+    curl_setopt($chIgUser, CURLOPT_URL, "https://graph.facebook.com/" . urlencode($instagramBusinessId) . "?fields=username&access_token=" . urlencode($pageAccessToken));
     curl_setopt($chIgUser, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($chIgUser, CURLOPT_SSL_VERIFYPEER, false);
     $igUserResponse = curl_exec($chIgUser);
@@ -123,7 +129,7 @@ if (isset($igData['instagram_business_account']['id'])) {
 try {
     $conn->beginTransaction();
 
-    // 5. Save the Facebook Page Token
+    // 6. Save the Facebook Page Token
     $stmt = $conn->prepare("
         INSERT INTO social_accounts (user_id, platform, account_name, access_token, platform_user_id, status) 
         VALUES (?, 'facebook', ?, ?, ?, 1)
@@ -136,7 +142,7 @@ try {
     ");
     $stmt->execute([$user_id, $pageName, $pageAccessToken, $pageId]);
 
-    // 6. Save Instagram if linked
+    // 7. Save Instagram if linked
     if ($instagramBusinessId && $instagramUsername) {
         $stmtIg = $conn->prepare("
             INSERT INTO social_accounts (user_id, platform, account_name, access_token, platform_user_id, status) 
@@ -153,7 +159,6 @@ try {
 
     $conn->commit();
 
-    // Redirect back to settings page with success message
     $msg = ($instagramBusinessId && $instagramUsername) ? "facebook_and_instagram_connected" : "facebook_connected";
     header("Location: settings.php?success=" . $msg);
     exit();
