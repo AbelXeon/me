@@ -51,7 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $allowed_video_mimes = ['video/mp4', 'video/quicktime'];
 
                 for ($i = 0; $i < $total_files; $i++) {
-                    // Check for explicit upload errors instead of silently skipping
                     if ($files['error'][$i] !== UPLOAD_ERR_OK) {
                         $error_codes = [
                             UPLOAD_ERR_INI_SIZE   => "The file is too large (exceeds PHP's limit).",
@@ -83,6 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (move_uploaded_file($files['tmp_name'][$i], $upload_dir . $new_filename)) {
                         $relative_path = 'uploads/posts/' . $new_filename;
+                        
+                        // FORCE FILE PERMISSION TO BE PUBLICLY READABLE (0644)
+                        chmod($upload_dir . $new_filename, 0644); 
+                        
                         $stmt = $conn->prepare("INSERT INTO media_files (path, type, size, mime_type, uploaded_by) VALUES (?, ?, ?, ?, ?)");
                         $stmt->execute([$relative_path, $media_type, $files['size'][$i], $detected_mime, $user_id]);
                         $uploaded_media_ids[] = $conn->lastInsertId();
