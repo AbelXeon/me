@@ -114,7 +114,8 @@ while ($row = $stmt->fetch()) {
                         <button type="submit" class="btn btn-danger">Disconnect</button>
                     </form>
                 <?php else: ?>
-                    <a href="connect-platforms.php" class="btn btn-primary">Connect</a>
+                    <!-- FIXED: Added platform=facebook parameter below -->
+                    <a href="connect-platforms.php?platform=facebook" class="btn btn-primary">Connect</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -165,7 +166,7 @@ while ($row = $stmt->fetch()) {
                             value="<?php echo htmlspecialchars($accounts['telegram']['platform_user_id'] ?? ''); ?>" required>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Save Telegram</button>
+                    <button type="submit" class="btn-primary">Save Telegram</button>
                 </form>
 
                 <?php if (isset($accounts['telegram'])): ?>
@@ -199,7 +200,8 @@ while ($row = $stmt->fetch()) {
                         <button type="submit" class="btn btn-danger">Disconnect</button>
                     </form>
                 <?php else: ?>
-                    <a href="connect-platforms.php" class="btn btn-primary">Connect</a>
+                    <!-- FIXED: Added platform=linkedin parameter below -->
+                    <a href="connect-platforms.php?platform=linkedin" class="btn btn-primary">Connect</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -224,7 +226,8 @@ while ($row = $stmt->fetch()) {
                         <button type="submit" class="btn btn-danger">Disconnect</button>
                     </form>
                 <?php else: ?>
-                    <a href="connect-platforms.php" class="btn btn-primary">Connect</a>
+                    <!-- FIXED: Added platform=tiktok parameter below -->
+                    <a href="connect-platforms.php?platform=tiktok" class="btn btn-primary">Connect</a>
                 <?php endif; ?>
             </div>
         </div>
