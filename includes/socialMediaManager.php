@@ -43,6 +43,8 @@ class SocialMediaManager {
                 $success = $this->postToTelegram($post, $platform_post_id, $error_message);
             } elseif ($platform === 'tiktok') {
                 $success = $this->postToTikTok($post, $platform_post_id, $error_message);
+            } elseif ($platform === 'facebook') {
+                $success = $this->postToFacebook($post, $platform_post_id, $error_message);
             }
 
             // 3. Update status in database (posted or failed)
@@ -163,19 +165,16 @@ class SocialMediaManager {
             return false;
         }
 
-        // TikTok strictly only accepts video files
         if ($post['media_file_type'] !== 'video') {
             $error_message = "TikTok only supports video uploads.";
             return false;
         }
 
-        // Prepare the caption with links/hashtags appended at the end (FIXED!)
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
             $finalCaption .= "\n\n" . $post['external_link'];
         }
 
-        // Dynamically get your verified domain from the TIKTOK_REDIRECT_URI environment variable
         $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
@@ -184,11 +183,10 @@ class SocialMediaManager {
 
         $accessToken = $account['access_token'];
 
-        // Build Content Posting API v2 Payload
         $payload = [
             'post_info' => [
-                'title' => $finalCaption, 
-                'privacy_level' => 'SELF_ONLY', 
+                'title' => $finalCaption,
+                'privacy_level' => 'SELF_ONLY',
                 'disable_duet' => false,
                 'disable_stitch' => false,
                 'disable_comment' => false
@@ -221,13 +219,85 @@ class SocialMediaManager {
 
         $result = json_decode($response, true);
         
-        // Parse TikTok success/error response codes
         if (isset($result['error']) && $result['error']['code'] === 'ok') {
             $platform_post_id = $result['data']['publish_id'] ?? null;
             return true;
         }
 
         $error_message = $result['error']['message'] ?? 'TikTok API Error';
+        return false;
+    }
+
+    /**
+     * Publishes text and media directly to Facebook Page Feed
+     */
+    private function postToFacebook($post, &$platform_post_id, &$error_message) {
+        $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'facebook' AND status = 1");
+        $stmt->execute([$post['user_id']]);
+        $account = $stmt->fetch();
+
+        if (!$account) {
+            $error_message = "Facebook account not connected.";
+            return false;
+        }
+
+        $pageAccessToken = $account['access_token'];
+        $pageId = $account['platform_user_id'];
+
+        // Prepare the caption with links appended
+        $finalCaption = $post['caption'];
+        if (!empty($post['external_link'])) {
+            $finalCaption .= "\n\n🔗 Links:\n" . $post['external_link'];
+        }
+
+        // Dynamically get your verified domain
+        $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
+        $parsedUrl = parse_url($redirectUri);
+        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+        $absoluteMediaUrl = $scheme . '://' . $host . '/' . $post['media_path'];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+
+        if ($post['media_file_type'] === 'video') {
+            // FACEBOOK VIDEO UPLOAD API (PULL method)
+            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/videos");
+            curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                'file_url'     => $absoluteMediaUrl,
+                'description'  => $finalCaption,
+                'access_token' => $pageAccessToken
+            ]);
+        } else {
+            // FACEBOOK PHOTO UPLOAD API (PULL method)
+            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/photos");
+            curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                'url'          => $absoluteMediaUrl,
+                'message'      => $finalCaption,
+                'access_token' => $pageAccessToken
+            ]);
+        }
+
+        $response = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+
+        if ($err) {
+            $error_message = "CURL Error: " . $err;
+            return false;
+        }
+
+        $result = json_decode($response, true);
+
+        if (isset($result['id']) || isset($result['post_id'])) {
+            // Returns the published post ID or media ID on success
+            $platform_post_id = $result['post_id'] ?? ($result['id'] ?? null);
+            return true;
+        }
+
+        $error_message = $result['error']['message'] ?? 'Facebook API Error';
         return false;
     }
 }

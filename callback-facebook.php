@@ -85,15 +85,45 @@ if (empty($pages)) {
     exit();
 }
 
-// For this test, we automatically connect the FIRST page found
+// Automatically connect the first Page found
 $targetPage = $pages[0];
 $pageAccessToken = $targetPage['access_token']; // Page specific token that never expires!
 $pageId = $targetPage['id'];
 $pageName = $targetPage['name'];
 
+// --- NEW INSTAGRAM DETECTION CODE ---
+$instagramBusinessId = null;
+$instagramUsername = null;
+
+// Query the Facebook Page to see if it has a linked Instagram Business Account
+$chIg = curl_init();
+curl_setopt($chIg, CURLOPT_URL, "https://graph.facebook.com/v18.0/" . urlencode($pageId) . "?fields=instagram_business_account&access_token=" . urlencode($pageAccessToken));
+curl_setopt($chIg, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($chIg, CURLOPT_SSL_VERIFYPEER, false);
+$igResponse = curl_exec($chIg);
+curl_close($chIg);
+
+$igData = json_decode($igResponse, true);
+
+if (isset($igData['instagram_business_account']['id'])) {
+    $instagramBusinessId = $igData['instagram_business_account']['id'];
+
+    // Fetch the Instagram Username
+    $chIgUser = curl_init();
+    curl_setopt($chIgUser, CURLOPT_URL, "https://graph.facebook.com/v18.0/" . urlencode($instagramBusinessId) . "?fields=username&access_token=" . urlencode($pageAccessToken));
+    curl_setopt($chIgUser, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($chIgUser, CURLOPT_SSL_VERIFYPEER, false);
+    $igUserResponse = curl_exec($chIgUser);
+    curl_close($chIgUser);
+
+    $igUserData = json_decode($igUserResponse, true);
+    $instagramUsername = $igUserData['username'] ?? null;
+}
+
 try {
-    // 5. Save the Page Access Token to social_accounts
-    // Works perfectly on PostgreSQL and SQLite
+    $conn->beginTransaction();
+
+    // 5. Save the Facebook Page Token
     $stmt = $conn->prepare("
         INSERT INTO social_accounts (user_id, platform, account_name, access_token, platform_user_id, status) 
         VALUES (?, 'facebook', ?, ?, ?, 1)
@@ -106,10 +136,30 @@ try {
     ");
     $stmt->execute([$user_id, $pageName, $pageAccessToken, $pageId]);
 
-    header("Location: settings.php?success=facebook_connected");
+    // 6. Save Instagram if linked
+    if ($instagramBusinessId && $instagramUsername) {
+        $stmtIg = $conn->prepare("
+            INSERT INTO social_accounts (user_id, platform, account_name, access_token, platform_user_id, status) 
+            VALUES (?, 'instagram', ?, ?, ?, 1)
+            ON CONFLICT(user_id, platform) DO UPDATE SET 
+            account_name = excluded.account_name,
+            access_token = excluded.access_token,
+            platform_user_id = excluded.platform_user_id,
+            status = 1,
+            connected_at = CURRENT_TIMESTAMP
+        ");
+        $stmtIg->execute([$user_id, $instagramUsername, $pageAccessToken, $instagramBusinessId]);
+    }
+
+    $conn->commit();
+
+    // Redirect back to settings page with success message
+    $msg = ($instagramBusinessId && $instagramUsername) ? "facebook_and_instagram_connected" : "facebook_connected";
+    header("Location: settings.php?success=" . $msg);
     exit();
 
 } catch (Exception $e) {
+    if ($conn->inTransaction()) { $conn->rollBack(); }
     header("Location: settings.php?error=" . urlencode("Database Error: " . $e->getMessage()));
     exit();
 }
