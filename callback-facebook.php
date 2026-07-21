@@ -10,7 +10,7 @@ $conn = getDBConnection();
 $code = $_GET['code'] ?? '';
 $state = $_GET['state'] ?? '';
 
-// 1. CSRF Verification
+// 1. Verify OAuth State to prevent CSRF attacks
 if (empty($state) || $state !== ($_SESSION['oauth_state'] ?? '')) {
     header("Location: settings.php?error=invalid_state");
     exit();
@@ -26,7 +26,7 @@ $appId = getenv('FB_APP_ID');
 $appSecret = getenv('FB_APP_SECRET');
 $redirectUri = getenv('FB_REDIRECT_URI');
 
-// 2. Exchange code for Short-Lived User Access Token
+// 2. Exchange the temporary code for a Short-Lived User Access Token
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/oauth/access_token?" . http_build_query([
     'client_id'     => $appId,
@@ -43,11 +43,12 @@ $tokenData = json_decode($response, true);
 $userAccessToken = $tokenData['access_token'] ?? null;
 
 if (!$userAccessToken) {
-    header("Location: settings.php?error=" . urlencode($tokenData['error']['message'] ?? 'User token exchange failed.'));
+    $errorMsg = $tokenData['error']['message'] ?? 'User token exchange failed.';
+    header("Location: settings.php?error=" . urlencode($errorMsg));
     exit();
 }
 
-// 3. Exchange Short-Lived User Token for Long-Lived User Token (60 days)
+// 3. Exchange Short-Lived User Token for a Long-Lived User Token (60 days)
 $chLong = curl_init();
 curl_setopt($chLong, CURLOPT_URL, "https://graph.facebook.com/v18.0/oauth/access_token?" . http_build_query([
     'grant_type'        => 'fb_exchange_token',
@@ -84,7 +85,7 @@ if (empty($pages)) {
     exit();
 }
 
-// For this simple test setup, we will connect the FIRST page found
+// For this test, we automatically connect the FIRST page found
 $targetPage = $pages[0];
 $pageAccessToken = $targetPage['access_token']; // Page specific token that never expires!
 $pageId = $targetPage['id'];
@@ -92,6 +93,7 @@ $pageName = $targetPage['name'];
 
 try {
     // 5. Save the Page Access Token to social_accounts
+    // Works perfectly on PostgreSQL and SQLite
     $stmt = $conn->prepare("
         INSERT INTO social_accounts (user_id, platform, account_name, access_token, platform_user_id, status) 
         VALUES (?, 'facebook', ?, ?, ?, 1)
