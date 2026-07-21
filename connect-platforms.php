@@ -45,7 +45,8 @@ if ($platform === 'tiktok') {
         'redirect_uri'  => $redirectUri,
         'scope'         => implode(',', $scopes),
         'state'         => $state,
-        'response_type' => 'code'
+        'response_type' => 'code',
+        'auth_type'     => 'rerequest' // FIXED: Forces Facebook to show the Page Selection checkboxes again!
     ]);
 
     header("Location: " . $authUrl);
