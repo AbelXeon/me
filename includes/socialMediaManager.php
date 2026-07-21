@@ -169,6 +169,12 @@ class SocialMediaManager {
             return false;
         }
 
+        // Prepare the caption with links/hashtags appended at the end (FIXED!)
+        $finalCaption = $post['caption'];
+        if (!empty($post['external_link'])) {
+            $finalCaption .= "\n\n" . $post['external_link'];
+        }
+
         // Dynamically get your verified domain from the TIKTOK_REDIRECT_URI environment variable
         $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
@@ -181,8 +187,8 @@ class SocialMediaManager {
         // Build Content Posting API v2 Payload
         $payload = [
             'post_info' => [
-                'title' => $post['caption'], 
-                'privacy_level' => 'SELF_ONLY', // CRUCIAL FIX: Required for un-audited sandbox accounts
+                'title' => $finalCaption, 
+                'privacy_level' => 'SELF_ONLY', 
                 'disable_duet' => false,
                 'disable_stitch' => false,
                 'disable_comment' => false
