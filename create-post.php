@@ -54,15 +54,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 for ($i = 0; $i < $total_files; $i++) {
                     if ($files['error'][$i] !== UPLOAD_ERR_OK) {
                         $error_codes = [
-                            UPLOAD_ERR_INI_SIZE   => "The file is too large (exceeds PHP's limit).",
-                            UPLOAD_ERR_FORM_SIZE  => "The file exceeds the HTML form limit.",
+                            UPLOAD_ERR_INI_SIZE   => "The file is too large.",
+                            UPLOAD_ERR_FORM_SIZE  => "The file exceeds the form limit.",
                             UPLOAD_ERR_PARTIAL    => "The file was only partially uploaded.",
                             UPLOAD_ERR_NO_FILE    => "No file was uploaded.",
-                            UPLOAD_ERR_NO_TMP_DIR => "Missing a temporary folder on the server.",
-                            UPLOAD_ERR_CANT_WRITE => "Failed to write file to disk (permission issue).",
-                            UPLOAD_ERR_EXTENSION  => "A PHP extension stopped the file upload."
+                            UPLOAD_ERR_NO_TMP_DIR => "Missing a temporary folder.",
+                            UPLOAD_ERR_CANT_WRITE => "Failed to write file to disk.",
+                            UPLOAD_ERR_EXTENSION  => "A PHP extension stopped the upload."
                         ];
-                        $err_msg = $error_codes[$files['error'][$i]] ?? "Unknown upload error code: " . $files['error'][$i];
+                        $err_msg = $error_codes[$files['error'][$i]] ?? "Unknown upload error: " . $files['error'][$i];
                         throw new Exception("File " . ($i+1) . " upload failed: " . $err_msg);
                     }
 
@@ -77,6 +77,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$media_type) throw new Exception("File " . ($i+1) . " is not supported.");
 
                     $ext = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
+                    
+                    // If image was compressed client-side, force save as jpg [1.1.2]
+                    if ($media_type === 'image') {
+                        $ext = 'jpg';
+                        $detected_mime = 'image/jpeg';
+                    }
+
                     $new_filename = 'post_' . $user_id . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
                     $upload_dir = __DIR__ . '/uploads/posts/';
                     if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
@@ -89,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt->execute([$relative_path, $media_type, $files['size'][$i], $detected_mime, $user_id]);
                         $uploaded_media_ids[] = $conn->lastInsertId();
                     } else {
-                        throw new Exception("Failed to move the uploaded file " . ($i+1) . " to the destination directory.");
+                        throw new Exception("Failed to move the uploaded file " . ($i+1) . ".");
                     }
                 }
 
@@ -140,7 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// FIXED: Added 'instagram' here so the checkbox renders on the page
 $platform_meta = [
     'facebook'  => ['icon' => '📘', 'label' => 'Facebook'],
     'instagram' => ['icon' => '📸', 'label' => 'Instagram'],
@@ -178,7 +184,8 @@ $platform_meta = [
                 You haven't connected any platforms yet. <a href="settings.php">Go connect one first →</a>
             </div>
         <?php else: ?>
-            <form method="POST" action="" enctype="multipart/form-data">
+            <!-- Added id='postForm' here so JS can target it -->
+            <form id="postForm" method="POST" action="" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
                 <div class="form-group">
@@ -199,7 +206,8 @@ $platform_meta = [
 
                 <div class="form-group">
                     <label for="media">Media (Select one or multiple)</label>
-                    <input type="file" id="media" name="media[]" accept="image/*,video/*" multiple required>
+                    <!-- Added id='mediaInput' here -->
+                    <input type="file" id="mediaInput" name="media[]" accept="image/*,video/*" multiple required>
                 </div>
 
                 <div class="form-group">
@@ -225,5 +233,104 @@ $platform_meta = [
             </form>
         <?php endif; ?>
     </div>
+
+    <!-- --- CLIENT SIDE IMAGE COMPRESSION SCRIPT (NO EXTERNAL LIBRARIES!) --- -->
+    <script>
+    document.getElementById('postForm').addEventListener('submit', async function(e) {
+        const fileInput = document.getElementById('mediaInput');
+        if (!fileInput.files.length) return;
+
+        e.preventDefault(); // Stop form submission temporarily to compress [1.1.2]
+        
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Compressing & Uploading...";
+
+        const dataTransfer = new DataArrayItemsCollector();
+
+        for (let i = 0; i < fileInput.files.length; i++) {
+            const file = fileInput.files[i];
+            
+            // Only compress if the file is an image [1.1.2]
+            if (file.type.startsWith('image/')) {
+                try {
+                    const compressedImage = await compressImage(file, 1024, 0.7); // Resizes to max 1024px width, 70% quality [1.1.2]
+                    dataTransfer.add(compressedImage);
+                } catch (err) {
+                    dataTransfer.add(file); // Fallback to original if compression fails [1.1.2]
+                }
+            } else {
+                dataTransfer.add(file); // Keep videos completely untouched [1.1.2]
+            }
+        }
+
+        fileInput.files = dataTransfer.files; // Replace original files with compressed files [1.1.2]
+        this.submit(); // Submit the form now [1.1.2]
+    });
+
+    // Helper class to override the FileList array in the file input [1.1.2]
+    class DataArrayItemsCollector {
+        constructor() {
+            this.dt = new DataTransfer();
+        }
+        add(file) {
+            this.dt.items.add(file);
+        }
+        get files() {
+            return this.dt.files;
+        }
+    }
+
+    // Native HTML5 Canvas Image Compression [1.1.2]
+    function compressImage(file, maxDimension, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function(event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function() {
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Calculate new dimensions keeping the aspect ratio [1.1.2]
+                    if (width > height) {
+                        if (width > maxDimension) {
+                            height *= maxDimension / width;
+                            width = maxDimension;
+                        }
+                    } else {
+                        if (height > maxDimension) {
+                            width *= maxDimension / height;
+                            height = maxDimension;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert canvas to a fresh compressed Blob/File [1.1.2]
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            reject(new Error("Canvas conversion failed"));
+                            return;
+                        }
+                        const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    }, 'image/jpeg', quality);
+                };
+                img.onerror = () => reject(new Error("Image load error"));
+            };
+            reader.onerror = () => reject(new Error("File read error"));
+        });
+    }
+    </script>
 </body>
 </html>

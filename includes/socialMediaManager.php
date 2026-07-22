@@ -216,9 +216,16 @@ class SocialMediaManager {
         ]);
 
         $response = curl_exec($ch);
-        $result = json_decode($response, true);
+        $err = curl_error($ch);
         curl_close($ch);
 
+        if ($err) {
+            $error_message = "CURL Error: " . $err;
+            return false;
+        }
+
+        $result = json_decode($response, true);
+        
         if (isset($result['error']) && $result['error']['code'] === 'ok') {
             $platform_post_id = $result['data']['publish_id'] ?? null;
             return true;
@@ -251,7 +258,6 @@ class SocialMediaManager {
 
         $mediaItems = $this->getPostMediaItems($post);
 
-        // Dynamically get your verified domain
         $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
@@ -417,13 +423,38 @@ class SocialMediaManager {
                 return false;
             }
 
-            // --- FIXED: WAIT FOR PROCESSING TO PREVENT "MEDIA ID NOT AVAILABLE" ---
-            if ($is_video) {
-                sleep(12); // Videos take longer
-            } else {
-                sleep(5);  // Images take about 3-5 seconds to be fully processed by Instagram [1.1.2]
+            // --- BULLETPROOF FIX: POLL INSTAGRAM STATUS UNTIL "FINISHED" ---
+            $isFinished = false;
+            $retries = 15; // Max 45 seconds total wait
+            while ($retries > 0) {
+                $chStatus = curl_init();
+                curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
+                curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($chStatus, CURLOPT_SSL_VERIFYPEER, false);
+                $statusResponse = curl_exec($chStatus);
+                curl_close($chStatus);
+
+                $statusResult = json_decode($statusResponse, true);
+                $statusCode = $statusResult['status_code'] ?? 'IN_PROGRESS';
+
+                if ($statusCode === 'FINISHED') {
+                    $isFinished = true;
+                    break;
+                } elseif ($statusCode === 'ERROR') {
+                    $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown processing error.');
+                    return false;
+                }
+
+                sleep(3); // Wait 3 seconds before checking again [1.1.2]
+                $retries--;
             }
 
+            if (!$isFinished) {
+                $error_message = "Instagram timed out waiting for media to process. Please try again.";
+                return false;
+            }
+
+            // STEP 3: Publish the processed container [1.1.2]
             $chPublish = curl_init();
             curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
             curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
@@ -477,7 +508,7 @@ class SocialMediaManager {
                 throw new Exception("Instagram Carousel requires at least 2 images.");
             }
 
-            // Wait for all item containers to be fully processed [1.1.2]
+            // Wait for all item containers to be finished [1.1.2]
             sleep(5);
 
             // Step B: Create main carousel container
