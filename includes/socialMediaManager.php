@@ -216,16 +216,9 @@ class SocialMediaManager {
         ]);
 
         $response = curl_exec($ch);
-        $err = curl_error($ch);
+        $result = json_decode($response, true);
         curl_close($ch);
 
-        if ($err) {
-            $error_message = "CURL Error: " . $err;
-            return false;
-        }
-
-        $result = json_decode($response, true);
-        
         if (isset($result['error']) && $result['error']['code'] === 'ok') {
             $platform_post_id = $result['data']['publish_id'] ?? null;
             return true;
@@ -264,7 +257,7 @@ class SocialMediaManager {
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
 
-        // CASE 1: SINGLE MEDIA POST (Photo or Video)
+        // CASE 1: SINGLE MEDIA POST
         if (count($mediaItems) === 1) {
             $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
             $ch = curl_init();
@@ -301,13 +294,12 @@ class SocialMediaManager {
             return false;
         }
 
-        // CASE 2: MULTI-PHOTO ALBUM POST (Requires 2-step process)
+        // CASE 2: MULTI-PHOTO ALBUM POST
         try {
             $attachedMediaIds = [];
 
-            // Step A: Upload each photo individually with published=false
             foreach ($mediaItems as $item) {
-                if ($item['type'] === 'video') continue; // Albums in Facebook API only support photos for simple tests
+                if ($item['type'] === 'video') continue;
 
                 $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
                 $ch = curl_init();
@@ -333,7 +325,6 @@ class SocialMediaManager {
                 throw new Exception("Failed to prepare any media files for the Facebook Album.");
             }
 
-            // Step B: Publish the final post linking all the uploaded photo IDs
             $chPublish = curl_init();
             curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$pageId}/feed");
             curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
@@ -390,7 +381,7 @@ class SocialMediaManager {
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
 
-        // CASE 1: SINGLE MEDIA POST (Photo or Video Reels)
+        // CASE 1: SINGLE MEDIA POST
         if (count($mediaItems) === 1) {
             $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
             $is_video = ($mediaItems[0]['type'] === 'video');
@@ -426,8 +417,11 @@ class SocialMediaManager {
                 return false;
             }
 
+            // --- FIXED: WAIT FOR PROCESSING TO PREVENT "MEDIA ID NOT AVAILABLE" ---
             if ($is_video) {
-                sleep(10); // Wait for Instagram to download and process the video file
+                sleep(12); // Videos take longer
+            } else {
+                sleep(5);  // Images take about 3-5 seconds to be fully processed by Instagram [1.1.2]
             }
 
             $chPublish = curl_init();
@@ -456,7 +450,6 @@ class SocialMediaManager {
         try {
             $carouselItemIds = [];
 
-            // Step A: Create container for each carousel item (only photos supported for basic tests)
             foreach ($mediaItems as $item) {
                 if ($item['type'] === 'video') continue;
 
@@ -484,6 +477,9 @@ class SocialMediaManager {
                 throw new Exception("Instagram Carousel requires at least 2 images.");
             }
 
+            // Wait for all item containers to be fully processed [1.1.2]
+            sleep(5);
+
             // Step B: Create main carousel container
             $chMain = curl_init();
             curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
@@ -505,6 +501,9 @@ class SocialMediaManager {
             if (!$creationId) {
                 throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
             }
+
+            // Wait for the main container to process [1.1.2]
+            sleep(5);
 
             // Step C: Publish the main carousel
             $chPublish = curl_init();
