@@ -218,8 +218,8 @@ class SocialMediaManager {
         ]);
 
         $response = curl_exec($ch);
-        $err = curl_error($ch);
         curl_close($ch);
+        $result = json_decode($response, true);
 
         if (isset($result['error']) && $result['error']['code'] === 'ok') {
             $platform_post_id = $result['data']['publish_id'] ?? null;
@@ -253,13 +253,11 @@ class SocialMediaManager {
 
         $mediaItems = $this->getPostMediaItems($post);
 
-        // Dynamically get your verified domain
         $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
 
-        // CASE 1: SINGLE MEDIA POST
         if (count($mediaItems) === 1) {
             $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
             $ch = curl_init();
@@ -296,10 +294,8 @@ class SocialMediaManager {
             return false;
         }
 
-        // CASE 2: MULTI-PHOTO ALBUM POST
         try {
             $attachedMediaIds = [];
-
             foreach ($mediaItems as $item) {
                 if ($item['type'] === 'video') continue;
 
@@ -383,7 +379,6 @@ class SocialMediaManager {
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
 
-        // CASE 1: SINGLE MEDIA POST
         if (count($mediaItems) === 1) {
             $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
             $is_video = ($mediaItems[0]['type'] === 'video');
@@ -419,7 +414,6 @@ class SocialMediaManager {
                 return false;
             }
 
-            // WAIT FOR PROCESSING TO PREVENT "MEDIA ID NOT AVAILABLE"
             $isFinished = false;
             $retries = 15; 
             while ($retries > 0) {
@@ -440,7 +434,6 @@ class SocialMediaManager {
                     $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
                     return false;
                 }
-
                 sleep(3); 
                 $retries--;
             }
@@ -472,10 +465,8 @@ class SocialMediaManager {
             return false;
         }
 
-        // CASE 2: MULTI-PHOTO CAROUSEL POST
         try {
             $carouselItemIds = [];
-
             foreach ($mediaItems as $item) {
                 if ($item['type'] === 'video') continue;
 
@@ -556,7 +547,7 @@ class SocialMediaManager {
     }
 
     /**
-     * Publishes a text and media directly to a personal LinkedIn Profile feed (NATIVE IMAGE & VIDEO UPLOADS FIXED!)
+     * Publishes text, multiple images, or a native video to a LinkedIn Profile
      */
     private function postToLinkedIn($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'linkedin' AND status = 1");
@@ -577,138 +568,100 @@ class SocialMediaManager {
         }
 
         $mediaItems = $this->getPostMediaItems($post);
+        $uploadedAssets = [];
+        $isVideoPost = false;
 
-        // Prepare standard LinkedIn request payload
+        // 1. Process all media attachments
+        foreach ($mediaItems as $item) {
+            $mediaPath = realpath(__DIR__ . '/../' . $item['path']);
+            if (!$mediaPath || !file_exists($mediaPath)) continue;
+
+            $fileBinary = file_get_contents($mediaPath);
+            $fileSize = filesize($mediaPath);
+            $isImage = ($item['type'] === 'image');
+
+            try {
+                if ($isImage) {
+                    $ch = curl_init("https://api.linkedin.com/v2/images?action=initializeUpload");
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, 1);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['initializeUploadRequest' => ['owner' => $urnOwner]]));
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer {$accessToken}", "Content-Type: application/json"]);
+                    $resp = json_decode(curl_exec($ch), true);
+                    curl_close($ch);
+
+                    $uploadUrl = $resp['value']['uploadUrl'] ?? null;
+                    $assetUrn = $resp['value']['image'] ?? null;
+                    $contentType = "image/jpeg";
+                } else {
+                    $ch = curl_init("https://api.linkedin.com/v2/videos?action=initializeUpload");
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_POST, 1);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                        'initializeUploadRequest' => [
+                            'owner' => $urnOwner,
+                            'fileSizeBytes' => $fileSize,
+                            'uploadCaptions' => [],
+                            'uploadShareThumbnail' => false
+                        ]
+                    ]));
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer {$accessToken}", "Content-Type: application/json"]);
+                    $resp = json_decode(curl_exec($ch), true);
+                    curl_close($ch);
+
+                    $uploadUrl = $resp['value']['uploadInstructions'][0]['uploadUrl'] ?? null;
+                    $assetUrn = $resp['value']['video'] ?? null;
+                    $contentType = "video/mp4";
+                    $isVideoPost = true;
+                }
+
+                if ($uploadUrl && $assetUrn) {
+                    $chPut = curl_init($uploadUrl);
+                    curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
+                    curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
+                    curl_setopt($chPut, CURLOPT_HTTPHEADER, ["Content-Type: {$contentType}"]);
+                    curl_exec($chPut);
+                    curl_close($chPut);
+
+                    $uploadedAssets[] = $assetUrn;
+                    if (!$isImage) sleep(8); // Wait for video processing
+                }
+            } catch (Exception $e) {
+                continue;
+            }
+            if ($isVideoPost) break; // LinkedIn supports only one video
+        }
+
         $payload = [
             'author' => $urnOwner,
             'commentary' => $finalCaption,
             'visibility' => 'PUBLIC',
-            'distribution' => [
-                'feedDistribution' => 'MAIN_FEED',
-                'targetEntities' => []
-            ],
+            'distribution' => ['feedDistribution' => 'MAIN_FEED'],
             'lifecycleState' => 'PUBLISHED'
         ];
 
-        // --- NEW NATIVE LINKEDIN IMAGE & VIDEO UPLOAD ENGINE (FIXED) ---
-        if (!empty($mediaItems)) {
-            $mediaPath = __DIR__ . '/../' . $mediaItems[0]['path'];
-            
-            if (file_exists($mediaPath)) {
-                $fileBinary = file_get_contents($mediaPath);
-                $fileSize = filesize($mediaPath);
-                $isImage = ($mediaItems[0]['type'] === 'image');
-
-                try {
-                    if ($isImage) {
-                        // --- NATIVE IMAGE UPLOAD ---
-                        $chRegister = curl_init();
-                        curl_setopt($chRegister, CURLOPT_URL, "https://api.linkedin.com/v2/images?action=initializeUpload"); // FIXED: Uses correct v2/images API endpoint! [1.1.2]
-                        curl_setopt($chRegister, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($chRegister, CURLOPT_SSL_VERIFYPEER, false);
-                        curl_setopt($chRegister, CURLOPT_POST, 1);
-                        curl_setopt($chRegister, CURLOPT_POSTFIELDS, json_encode([
-                            'initializeUploadRequest' => [
-                                'owner' => $urnOwner
-                            ]
-                        ]));
-                        $headers = [
-                            "Authorization: Bearer {$accessToken}",
-                            "Content-Type: application/json"
-                        ];
-                        curl_setopt($chRegister, CURLOPT_HTTPHEADER, $headers);
-                        $registerResponse = curl_exec($chRegister);
-                        curl_close($chRegister);
-
-                        $registerResult = json_decode($registerResponse, true);
-                        
-                        $uploadUrl = $registerResult['value']['uploadUrl'] ?? null;
-                        $mediaUrn = $registerResult['value']['image'] ?? null;
-                        $contentType = "image/jpeg";
-                    } else {
-                        // --- NATIVE VIDEO UPLOAD (FIXED FOR /v2/videos) ---
-                        $chRegister = curl_init();
-                        curl_setopt($chRegister, CURLOPT_URL, "https://api.linkedin.com/v2/videos?action=initializeUpload"); // FIXED: Uses correct v2/videos API endpoint! [1]
-                        curl_setopt($chRegister, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($chRegister, CURLOPT_SSL_VERIFYPEER, false);
-                        curl_setopt($chRegister, CURLOPT_POST, 1);
-                        curl_setopt($chRegister, CURLOPT_POSTFIELDS, json_encode([
-                            'initializeUploadRequest' => [
-                                'owner'               => $urnOwner,
-                                'fileSizeBytes'       => $fileSize,
-                                'uploadCaptions'      => [],
-                                'uploadShareThumbnail'=> false
-                            ]
-                        ]));
-                        $headers = [
-                            "Authorization: Bearer {$accessToken}",
-                            "Content-Type: application/json"
-                        ];
-                        curl_setopt($chRegister, CURLOPT_HTTPHEADER, $headers);
-                        $registerResponse = curl_exec($chRegister);
-                        curl_close($chRegister);
-
-                        $registerResult = json_decode($registerResponse, true);
-                        
-                        // FIXED: Correctly parse the video uploadInstructions array [1]
-                        $uploadUrl = $registerResult['value']['uploadInstructions'][0]['uploadUrl'] ?? null;
-                        $mediaUrn = $registerResult['value']['video'] ?? null;
-                        $contentType = "video/mp4";
-                    }
-
-                    if ($uploadUrl && $mediaUrn) {
-                        // Step B: Upload the raw binary file data to the provided uploadUrl [1, 1.1.2]
-                        $chPut = curl_init();
-                        curl_setopt($chPut, CURLOPT_URL, $uploadUrl);
-                        curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($chPut, CURLOPT_SSL_VERIFYPEER, false);
-                        curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
-                        curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
-                        curl_setopt($chPut, CURLOPT_HTTPHEADER, [
-                            "Content-Type: {$contentType}" // FIXED: Removed the Authorization header for S3 uploads [1.2.5]
-                        ]);
-                        curl_exec($chPut);
-                        curl_close($chPut);
-
-                        // If video, wait 8 seconds for LinkedIn's video encoder to register the file
-                        if (!$isImage) {
-                            sleep(8);
-                        }
-
-                        // Step C: Link the successfully uploaded asset URN directly to your post payload! [1, 1.1.2]
-                        $payload['content'] = [
-                            'media' => [
-                                'id' => $mediaUrn // FIXED: Now dynamically handles both image and video URNs! [1, 1.1.2]
-                            ]
-                        ];
-                    }
-                } catch (Exception $e) {
-                    // Fallback silently to Article Share if binary upload fails [1]
+        if (!empty($uploadedAssets)) {
+            if ($isVideoPost) {
+                $payload['content'] = ['media' => ['id' => $uploadedAssets[0]]];
+            } else {
+                $imagesArray = [];
+                foreach ($uploadedAssets as $urn) {
+                    $imagesArray[] = ['id' => $urn];
                 }
+                $payload['content'] = ['multiImage' => ['images' => $imagesArray]];
             }
-        }
-
-        // Fallback for files if upload failed or was skipped
-        if (empty($payload['content']) && !empty($mediaItems)) {
-            $redirectUri = getenv('LINKEDIN_REDIRECT_URI') ?: '';
-            $parsedUrl = parse_url($redirectUri);
-            $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
-            $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
-
+        } else if (!empty($post['external_link'])) {
             $payload['content'] = [
                 'article' => [
-                    'source'      => $absoluteMediaUrl,
-                    'title'       => !empty($post['title']) ? $post['title'] : 'Shared Media',
-                    'description' => 'Shared content via Social Media Manager.'
+                    'source' => $post['external_link'],
+                    'title' => $post['title'] ?: 'Shared Link'
                 ]
             ];
         }
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "https://api.linkedin.com/v2/posts");
+        $ch = curl_init("https://api.linkedin.com/v2/posts");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
