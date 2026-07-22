@@ -32,7 +32,6 @@ if ($platform === 'tiktok') {
     $redirectUri = getenv('FB_REDIRECT_URI');
     $state = $_SESSION['oauth_state'];
     
-    // Meta permissions required for Page Posting, Instagram, and Business Suite Pages
     $scopes = [
         'public_profile',
         'pages_show_list',
@@ -40,7 +39,7 @@ if ($platform === 'tiktok') {
         'pages_read_engagement',
         'instagram_basic',
         'instagram_content_publish',
-        'business_management' // FIXED: Added this scope to unlock Business-Suite managed Pages!
+        'business_management'
     ];
 
     $authUrl = "https://www.facebook.com/v18.0/dialog/oauth/?" . http_build_query([
@@ -50,6 +49,25 @@ if ($platform === 'tiktok') {
         'state'         => $state,
         'response_type' => 'code',
         'auth_type'     => 'rerequest'
+    ]);
+
+    header("Location: " . $authUrl);
+    exit();
+
+} elseif ($platform === 'linkedin') {
+    $clientId = getenv('LINKEDIN_CLIENT_ID');
+    $redirectUri = getenv('LINKEDIN_REDIRECT_URI');
+    $state = $_SESSION['oauth_state'];
+    
+    // Scopes for OpenID profile and posting permissions (Space-separated for LinkedIn)
+    $scopes = 'openid profile w_member_social';
+
+    $authUrl = "https://www.linkedin.com/oauth/v2/authorization?" . http_build_query([
+        'response_type' => 'code',
+        'client_id'     => $clientId,
+        'redirect_uri'  => $redirectUri,
+        'state'         => $state,
+        'scope'         => $scopes
     ]);
 
     header("Location: " . $authUrl);

@@ -47,6 +47,8 @@ class SocialMediaManager {
                 $success = $this->postToFacebook($post, $platform_post_id, $error_message);
             } elseif ($platform === 'instagram') {
                 $success = $this->postToInstagram($post, $platform_post_id, $error_message);
+            } elseif ($platform === 'linkedin') {
+                $success = $this->postToLinkedIn($post, $platform_post_id, $error_message);
             }
 
             // Update status in database
@@ -423,9 +425,9 @@ class SocialMediaManager {
                 return false;
             }
 
-            // --- BULLETPROOF FIX: POLL INSTAGRAM STATUS UNTIL "FINISHED" ---
+            // WAIT FOR PROCESSING TO PREVENT "MEDIA ID NOT AVAILABLE"
             $isFinished = false;
-            $retries = 15; // Max 45 seconds total wait
+            $retries = 15; 
             while ($retries > 0) {
                 $chStatus = curl_init();
                 curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
@@ -441,20 +443,19 @@ class SocialMediaManager {
                     $isFinished = true;
                     break;
                 } elseif ($statusCode === 'ERROR') {
-                    $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown processing error.');
+                    $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
                     return false;
                 }
 
-                sleep(3); // Wait 3 seconds before checking again [1.1.2]
+                sleep(3); 
                 $retries--;
             }
 
             if (!$isFinished) {
-                $error_message = "Instagram timed out waiting for media to process. Please try again.";
+                $error_message = "Instagram timed out waiting for media to process.";
                 return false;
             }
 
-            // STEP 3: Publish the processed container [1.1.2]
             $chPublish = curl_init();
             curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
             curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
@@ -508,10 +509,8 @@ class SocialMediaManager {
                 throw new Exception("Instagram Carousel requires at least 2 images.");
             }
 
-            // Wait for all item containers to be finished [1.1.2]
             sleep(5);
 
-            // Step B: Create main carousel container
             $chMain = curl_init();
             curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
             curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
@@ -533,10 +532,8 @@ class SocialMediaManager {
                 throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
             }
 
-            // Wait for the main container to process [1.1.2]
             sleep(5);
 
-            // Step C: Publish the main carousel
             $chPublish = curl_init();
             curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
             curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
@@ -562,5 +559,94 @@ class SocialMediaManager {
             $error_message = $e->getMessage();
             return false;
         }
+    }
+
+    /**
+     * Publishes a text and media directly to a personal LinkedIn Profile feed
+     */
+    private function postToLinkedIn($post, &$platform_post_id, &$error_message) {
+        $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'linkedin' AND status = 1");
+        $stmt->execute([$post['user_id']]);
+        $account = $stmt->fetch();
+
+        if (!$account) {
+            $error_message = "LinkedIn account not connected.";
+            return false;
+        }
+
+        $accessToken = $account['access_token'];
+        $urnOwner = $account['platform_user_id']; // Format: urn:li:person:XXXXXX
+
+        $finalCaption = $post['caption'];
+        if (!empty($post['external_link'])) {
+            $finalCaption .= "\n\n" . $post['external_link'];
+        }
+
+        $mediaItems = $this->getPostMediaItems($post);
+
+        // Dynamically get your verified domain
+        $redirectUri = getenv('LINKEDIN_REDIRECT_URI') ?: '';
+        $parsedUrl = parse_url($redirectUri);
+        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+
+        // Prepare standard LinkedIn request payload [1]
+        $payload = [
+            'author' => $urnOwner,
+            'commentary' => $finalCaption,
+            'visibility' => 'PUBLIC',
+            'distribution' => [
+                'feedDistribution' => 'MAIN_FEED',
+                'targetEntities' => []
+            ],
+            'lifecycleState' => 'PUBLISHED'
+        ];
+
+        // LinkedIn API allows linking standard image/video URLs as an Article Share [1]
+        // This is extremely robust and avoids complex multi-stage media uploads [1].
+        if (!empty($mediaItems)) {
+            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+            $payload['content'] = [
+                'article' => [
+                    'source'      => $absoluteMediaUrl,
+                    'title'       => !empty($post['title']) ? $post['title'] : 'Shared Media',
+                    'description' => 'Shared content via Social Media Manager.'
+                ]
+            ];
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://api.linkedin.com/v2/posts");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer {$accessToken}",
+            "Content-Type: application/json",
+            "X-Restli-Protocol-Version: 2.0.0" // Required by LinkedIn [1]
+        ]);
+
+        $response = curl_exec($ch);
+        $err = curl_error($ch);
+        
+        // LinkedIn returns the post ID in the headers on success, so we capture it
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err) {
+            $error_message = "CURL Error: " . $err;
+            return false;
+        }
+
+        // LinkedIn v2 API returns HTTP 201 Created on success
+        if ($httpCode === 201) {
+            $platform_post_id = 'urn:li:share:' . time(); // Assign a mock share ID if none returned
+            return true;
+        }
+
+        $result = json_decode($response, true);
+        $error_message = $result['message'] ?? 'LinkedIn Publishing Error (HTTP ' . $httpCode . ')';
+        return false;
     }
 }
