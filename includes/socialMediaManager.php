@@ -503,8 +503,10 @@ class SocialMediaManager {
                 throw new Exception("Instagram Carousel requires at least 2 images.");
             }
 
+            // Wait for all item containers to be finished
             sleep(5);
 
+            // Step B: Create main carousel container
             $chMain = curl_init();
             curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
             curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
@@ -526,8 +528,10 @@ class SocialMediaManager {
                 throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
             }
 
+            // Wait for the main container to process
             sleep(5);
 
+            // Step C: Publish the main carousel
             $chPublish = curl_init();
             curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
             curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
@@ -556,7 +560,7 @@ class SocialMediaManager {
     }
 
     /**
-     * Publishes a text and media directly to a personal LinkedIn Profile feed (NATIVE IMAGE UPLOAD FIXED!)
+     * Publishes a text and media directly to a personal LinkedIn Profile feed
      */
     private function postToLinkedIn($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'linkedin' AND status = 1");
@@ -590,8 +594,7 @@ class SocialMediaManager {
             'lifecycleState' => 'PUBLISHED'
         ];
 
-        // --- NEW NATIVE LINKEDIN IMAGE UPLOAD ENGINE ---
-        // If an image was uploaded, upload it natively to LinkedIn's servers instead of sharing a raw link! [1]
+        // --- FIXED: CORRECTED THE LONG CLASS-NAME TYPO HERE ---
         if (!empty($mediaItems) && $mediaItems[0]['type'] === 'image') {
             $mediaPath = __DIR__ . '/../' . $mediaItems[0]['path'];
             
@@ -624,7 +627,8 @@ class SocialMediaManager {
 
                     $registerResult = json_decode($registerResponse, true);
                     
-                    $uploadUrl = $registerResult['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadMechanism']['uploadUrl'] ?? null;
+                    // FIXED: Changed MediaUploadMechanism to MediaUploadHttpRequest
+                    $uploadUrl = $registerResult['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl'] ?? null;
                     $assetUrn = $registerResult['value']['asset'] ?? null;
 
                     if ($uploadUrl && $assetUrn) {
@@ -638,8 +642,7 @@ class SocialMediaManager {
                         curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
                         curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
                         curl_setopt($chPut, CURLOPT_HTTPHEADER, [
-                            "Authorization: Bearer {$accessToken}",
-                            "Content-Type: image/jpeg" // Force standard image content header [1]
+                            "Content-Type: image/jpeg" // FIXED: Removed the Authorization header for S3 uploads [1.2.5]
                         ]);
                         curl_exec($chPut);
                         curl_close($chPut);
