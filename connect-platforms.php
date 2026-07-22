@@ -32,14 +32,15 @@ if ($platform === 'tiktok') {
     $redirectUri = getenv('FB_REDIRECT_URI');
     $state = $_SESSION['oauth_state'];
     
-    // Standard Business Scopes (Pages + Instagram)
+    // Meta permissions required for Page Posting, Instagram, and Business Suite Pages
     $scopes = [
         'public_profile',
         'pages_show_list',
         'pages_manage_posts',
         'pages_read_engagement',
         'instagram_basic',
-        'instagram_content_publish'
+        'instagram_content_publish',
+        'business_management' // FIXED: Added this scope to unlock Business-Suite managed Pages!
     ];
 
     $authUrl = "https://www.facebook.com/v18.0/dialog/oauth/?" . http_build_query([
