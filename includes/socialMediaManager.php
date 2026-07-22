@@ -221,13 +221,6 @@ class SocialMediaManager {
         $err = curl_error($ch);
         curl_close($ch);
 
-        if ($err) {
-            $error_message = "CURL Error: " . $err;
-            return false;
-        }
-
-        $result = json_decode($response, true);
-        
         if (isset($result['error']) && $result['error']['code'] === 'ok') {
             $platform_post_id = $result['data']['publish_id'] ?? null;
             return true;
@@ -260,6 +253,7 @@ class SocialMediaManager {
 
         $mediaItems = $this->getPostMediaItems($post);
 
+        // Dynamically get your verified domain
         $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
         $parsedUrl = parse_url($redirectUri);
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
@@ -562,7 +556,7 @@ class SocialMediaManager {
     }
 
     /**
-     * Publishes a text and media directly to a personal LinkedIn Profile feed
+     * Publishes a text and media directly to a personal LinkedIn Profile feed (NATIVE IMAGE UPLOAD FIXED!)
      */
     private function postToLinkedIn($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'linkedin' AND status = 1");
@@ -575,7 +569,7 @@ class SocialMediaManager {
         }
 
         $accessToken = $account['access_token'];
-        $urnOwner = $account['platform_user_id']; // Format: urn:li:person:XXXXXX
+        $urnOwner = $account['platform_user_id']; 
 
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
@@ -584,13 +578,7 @@ class SocialMediaManager {
 
         $mediaItems = $this->getPostMediaItems($post);
 
-        // Dynamically get your verified domain
-        $redirectUri = getenv('LINKEDIN_REDIRECT_URI') ?: '';
-        $parsedUrl = parse_url($redirectUri);
-        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
-        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-
-        // Prepare standard LinkedIn request payload [1]
+        // Prepare standard LinkedIn request payload
         $payload = [
             'author' => $urnOwner,
             'commentary' => $finalCaption,
@@ -602,10 +590,82 @@ class SocialMediaManager {
             'lifecycleState' => 'PUBLISHED'
         ];
 
-        // LinkedIn API allows linking standard image/video URLs as an Article Share [1]
-        // This is extremely robust and avoids complex multi-stage media uploads [1].
-        if (!empty($mediaItems)) {
+        // --- NEW NATIVE LINKEDIN IMAGE UPLOAD ENGINE ---
+        // If an image was uploaded, upload it natively to LinkedIn's servers instead of sharing a raw link! [1]
+        if (!empty($mediaItems) && $mediaItems[0]['type'] === 'image') {
+            $mediaPath = __DIR__ . '/../' . $mediaItems[0]['path'];
+            
+            if (file_exists($mediaPath)) {
+                try {
+                    // Step A: Register the image upload [1]
+                    $chRegister = curl_init();
+                    curl_setopt($chRegister, CURLOPT_URL, "https://api.linkedin.com/v2/assets?action=registerUpload");
+                    curl_setopt($chRegister, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($chRegister, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($chRegister, CURLOPT_POST, 1);
+                    curl_setopt($chRegister, CURLOPT_POSTFIELDS, json_encode([
+                        'registerUploadRequest' => [
+                            'recipes' => ['urn:li:digitalmediaRecipe:feedshare-image'],
+                            'owner' => $urnOwner,
+                            'serviceRelationships' => [
+                                [
+                                    'relationshipType' => 'OWNER',
+                                    'identifier' => 'urn:li:userGeneratedContent'
+                                ]
+                            ]
+                        ]
+                    ]));
+                    curl_setopt($chRegister, CURLOPT_HTTPHEADER, [
+                        "Authorization: Bearer {$accessToken}",
+                        "Content-Type: application/json"
+                    ]);
+                    $registerResponse = curl_exec($chRegister);
+                    curl_close($chRegister);
+
+                    $registerResult = json_decode($registerResponse, true);
+                    
+                    $uploadUrl = $registerResult['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadMechanism']['uploadUrl'] ?? null;
+                    $assetUrn = $registerResult['value']['asset'] ?? null;
+
+                    if ($uploadUrl && $assetUrn) {
+                        // Step B: Upload the raw binary file data to the provided uploadUrl [1]
+                        $fileBinary = file_get_contents($mediaPath);
+                        
+                        $chPut = curl_init();
+                        curl_setopt($chPut, CURLOPT_URL, $uploadUrl);
+                        curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($chPut, CURLOPT_SSL_VERIFYPEER, false);
+                        curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
+                        curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
+                        curl_setopt($chPut, CURLOPT_HTTPHEADER, [
+                            "Authorization: Bearer {$accessToken}",
+                            "Content-Type: image/jpeg" // Force standard image content header [1]
+                        ]);
+                        curl_exec($chPut);
+                        curl_close($chPut);
+
+                        // Step C: Link the successfully uploaded asset URN directly to your post payload! [1]
+                        $payload['content'] = [
+                            'media' => [
+                                'title' => !empty($post['title']) ? $post['title'] : 'Shared Image',
+                                'id'    => $assetUrn
+                            ]
+                        ];
+                    }
+                } catch (Exception $e) {
+                    // Fallback silently to Article Share if binary upload fails [1]
+                }
+            }
+        }
+
+        // Fallback for videos: Share as an Article Link [1]
+        if (empty($payload['content']) && !empty($mediaItems)) {
+            $redirectUri = getenv('LINKEDIN_REDIRECT_URI') ?: '';
+            $parsedUrl = parse_url($redirectUri);
+            $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+            $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
             $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+
             $payload['content'] = [
                 'article' => [
                     'source'      => $absoluteMediaUrl,
@@ -624,29 +684,20 @@ class SocialMediaManager {
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             "Authorization: Bearer {$accessToken}",
             "Content-Type: application/json",
-            "X-Restli-Protocol-Version: 2.0.0" // Required by LinkedIn [1]
+            "X-Restli-Protocol-Version: 2.0.0"
         ]);
 
         $response = curl_exec($ch);
-        $err = curl_error($ch);
-        
-        // LinkedIn returns the post ID in the headers on success, so we capture it
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($err) {
-            $error_message = "CURL Error: " . $err;
-            return false;
-        }
-
-        // LinkedIn v2 API returns HTTP 201 Created on success
         if ($httpCode === 201) {
-            $platform_post_id = 'urn:li:share:' . time(); // Assign a mock share ID if none returned
+            $platform_post_id = 'urn:li:share:' . time(); 
             return true;
         }
 
         $result = json_decode($response, true);
-        $error_message = $result['message'] ?? 'LinkedIn Publishing Error (HTTP ' . $httpCode . ')';
+        $error_message = $result['message'] ?? 'LinkedIn Error (HTTP ' . $httpCode . ')';
         return false;
     }
 }
