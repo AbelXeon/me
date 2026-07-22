@@ -560,7 +560,7 @@ class SocialMediaManager {
     }
 
     /**
-     * Publishes a text and media directly to a personal LinkedIn Profile feed (NATIVE IMAGE UPLOAD FIXED!)
+     * Publishes a text and media directly to a personal LinkedIn Profile feed
      */
     private function postToLinkedIn($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'linkedin' AND status = 1");
@@ -594,22 +594,30 @@ class SocialMediaManager {
             'lifecycleState' => 'PUBLISHED'
         ];
 
-        // --- NEW NATIVE LINKEDIN IMAGE UPLOAD ENGINE ---
-        // If an image was uploaded, upload it natively to LinkedIn's servers instead of sharing a raw link! [1]
+        $imageUploadSucceeded = false;
+
+        // --- Attempt image upload only if the media is actually an image ---
         if (!empty($mediaItems) && $mediaItems[0]['type'] === 'image') {
             $mediaPath = __DIR__ . '/../' . $mediaItems[0]['path'];
-            
+
             if (file_exists($mediaPath)) {
                 try {
-                    // Step A: Initialize the image upload [1.1.2]
+                    // Step A: Register the image upload
                     $chRegister = curl_init();
-                    curl_setopt($chRegister, CURLOPT_URL, "https://api.linkedin.com/v2/images?action=initializeUpload"); // FIXED: Uses correct v2/images API endpoint! [1.1.2]
+                    curl_setopt($chRegister, CURLOPT_URL, "https://api.linkedin.com/v2/assets?action=registerUpload");
                     curl_setopt($chRegister, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($chRegister, CURLOPT_SSL_VERIFYPEER, false);
                     curl_setopt($chRegister, CURLOPT_POST, 1);
                     curl_setopt($chRegister, CURLOPT_POSTFIELDS, json_encode([
-                        'initializeUploadRequest' => [
-                            'owner' => $urnOwner
+                        'registerUploadRequest' => [
+                            'recipes' => ['urn:li:digitalmediaRecipe:feedshare-image'],
+                            'owner' => $urnOwner,
+                            'serviceRelationships' => [
+                                [
+                                    'relationshipType' => 'OWNER',
+                                    'identifier' => 'urn:li:userGeneratedContent'
+                                ]
+                            ]
                         ]
                     ]));
                     curl_setopt($chRegister, CURLOPT_HTTPHEADER, [
@@ -620,15 +628,18 @@ class SocialMediaManager {
                     curl_close($chRegister);
 
                     $registerResult = json_decode($registerResponse, true);
-                    
-                    // FIXED: Correctly parse the new v2/images response structure [1.1.2]
-                    $uploadUrl = $registerResult['value']['uploadUrl'] ?? null;
-                    $imageUrn = $registerResult['value']['image'] ?? null;
 
-                    if ($uploadUrl && $imageUrn) {
-                        // Step B: Upload the raw binary file data to the provided uploadUrl [1.1.2]
+                    $uploadUrl = $registerResult['value']['uploadMechanism']['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']['uploadUrl'] ?? null;
+                    $assetUrn = $registerResult['value']['asset'] ?? null;
+
+                    if ($uploadUrl && $assetUrn) {
+                        // Step B: Upload the raw binary file data to the provided uploadUrl.
+                        // NOTE: LinkedIn's upload endpoint DOES require the Authorization header,
+                        // unlike a raw S3 pre-signed URL. Previously this header was stripped,
+                        // which made the upload fail silently (401) and fall through to the
+                        // article-link fallback below -- meaning images never actually attached.
                         $fileBinary = file_get_contents($mediaPath);
-                        
+
                         $chPut = curl_init();
                         curl_setopt($chPut, CURLOPT_URL, $uploadUrl);
                         curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
@@ -636,26 +647,32 @@ class SocialMediaManager {
                         curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
                         curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
                         curl_setopt($chPut, CURLOPT_HTTPHEADER, [
-                            "Content-Type: image/jpeg" // FIXED: Removed the Authorization header for S3 uploads [1.2.5]
+                            "Authorization: Bearer {$accessToken}",
+                            "Content-Type: image/jpeg"
                         ]);
                         curl_exec($chPut);
+                        $putHttpCode = curl_getinfo($chPut, CURLINFO_HTTP_CODE);
                         curl_close($chPut);
 
-                        // Step C: Link the successfully uploaded image URN directly to your post payload! [1.1.2]
-                        $payload['content'] = [
-                            'media' => [
-                                'id' => $imageUrn // FIXED: Uses correct urn:li:image format instead of legacy digitalmedia [1.1.2]
-                            ]
-                        ];
+                        // 200/201 = upload accepted by LinkedIn
+                        if ($putHttpCode >= 200 && $putHttpCode < 300) {
+                            $payload['content'] = [
+                                'media' => [
+                                    'title' => !empty($post['title']) ? $post['title'] : 'Shared Image',
+                                    'id'    => $assetUrn
+                                ]
+                            ];
+                            $imageUploadSucceeded = true;
+                        }
                     }
                 } catch (Exception $e) {
-                    // Fallback silently to Article Share if binary upload fails [1]
+                    // Fall through to article-link fallback below
                 }
             }
         }
 
-        // Fallback for videos: Share as an Article Link [1]
-        if (empty($payload['content']) && !empty($mediaItems)) {
+        // Fallback ONLY for videos, or if the image upload genuinely failed
+        if (!$imageUploadSucceeded && empty($payload['content']) && !empty($mediaItems)) {
             $redirectUri = getenv('LINKEDIN_REDIRECT_URI') ?: '';
             $parsedUrl = parse_url($redirectUri);
             $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
@@ -671,29 +688,51 @@ class SocialMediaManager {
             ];
         }
 
+        // --- Main post request ---
+        // FIXED: /v2/posts is deprecated for this resource. The current Posts API lives at
+        // /rest/posts and REQUIRES a LinkedIn-Version header. Without it, LinkedIn's gateway
+        // frequently returns a bare 5xx "Internal Server Error" with no useful message --
+        // which is exactly what was showing up in the post history.
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "https://api.linkedin.com/v2/posts");
+        curl_setopt($ch, CURLOPT_URL, "https://api.linkedin.com/rest/posts");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, true); // need response headers to read x-restli-id
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             "Authorization: Bearer {$accessToken}",
             "Content-Type: application/json",
-            "X-Restli-Protocol-Version: 2.0.0"
+            "X-Restli-Protocol-Version: 2.0.0",
+            "LinkedIn-Version: 202606" // current active version as of July 2026; bump ~yearly
         ]);
 
         $response = curl_exec($ch);
+        $curlErr = curl_error($ch);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
+        if ($curlErr) {
+            $error_message = "LinkedIn CURL Error: " . $curlErr;
+            return false;
+        }
+
+        $headerStr = substr($response, 0, $headerSize);
+        $bodyStr = substr($response, $headerSize);
+
         if ($httpCode === 201) {
-            $platform_post_id = 'urn:li:share:' . time(); 
+            // Real post ID comes back in the x-restli-id response header, not the JSON body
+            if (preg_match('/x-restli-id:\s*(\S+)/i', $headerStr, $m)) {
+                $platform_post_id = trim($m[1]);
+            } else {
+                $platform_post_id = 'urn:li:share:' . time(); // fallback if header missing
+            }
             return true;
         }
 
-        $result = json_decode($response, true);
-        $error_message = $result['message'] ?? 'LinkedIn Error (HTTP ' . $httpCode . ')';
+        $result = json_decode($bodyStr, true);
+        $error_message = $result['message'] ?? ('LinkedIn Error (HTTP ' . $httpCode . '): ' . $bodyStr);
         return false;
     }
 }
