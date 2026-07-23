@@ -1,14 +1,15 @@
 <?php
 function sendCodeEmail($toEmail, $toName, $code, $purpose = 'email_verify') {
-    // Try getting API Key from environment variables
     $apiKey = getenv('BREVO_API_KEY') ?: ($_ENV['BREVO_API_KEY'] ?? ($_SERVER['BREVO_API_KEY'] ?? ''));
 
     if (empty($apiKey)) {
-        error_log("Brevo Error: BREVO_API_KEY environment variable is not set!");
+        error_log("Brevo Error: BREVO_API_KEY is not set!");
         return false;
     }
 
-    $subject = ($purpose === 'email_verify') ? "Verify Your Account" : "Reset Your Password";
+    // Adding code to subject to prevent email threading/grouping
+    $subject = ($purpose === 'email_verify') ? "Verify Account: $code" : "Reset Password: $code";
+    
     $title = ($purpose === 'email_verify') ? "Welcome to Social Manager!" : "Password Reset Request";
     $text = ($purpose === 'email_verify') ? "Use this code to complete your registration:" : "Use this code to reset your password:";
 
@@ -41,12 +42,5 @@ function sendCodeEmail($toEmail, $toName, $code, $purpose = 'email_verify') {
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    // Debugging log if Brevo returns error
-    if ($httpCode >= 400) {
-        error_log("Brevo API Error ($httpCode): " . $response);
-        return false;
-    }
-
-    return true;
+    return ($httpCode < 400);
 }
-?>

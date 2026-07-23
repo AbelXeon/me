@@ -1,7 +1,11 @@
 <?php
 // dashboard.php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once 'includes/auth_check.php';
-requireLogin();
+requireLogin(); // This function is inside auth_check.php
 ?>
 <!DOCTYPE html>
 <html lang="en">
