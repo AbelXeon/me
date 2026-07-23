@@ -250,6 +250,7 @@ SQL;
             platform_post_id    VARCHAR(255),
             status              VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','posted','failed')),
             error_message       TEXT,
+            comments_enabled INTEGER NOT NULL DEFAULT 1,
             posted_at           TIMESTAMP,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
         );

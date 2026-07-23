@@ -30,7 +30,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
-        
+
+        // Per-platform comment toggle. Unchecked checkboxes are simply absent from
+        // $_POST, so absence = disabled. Only meaningful for instagram/tiktok --
+        // stored for every platform row regardless, other platforms just ignore it.
+        $instagram_comments_enabled = isset($_POST['instagram_comments']) ? 1 : 0;
+        $tiktok_comments_enabled    = isset($_POST['tiktok_comments']) ? 1 : 0;
+
         if (!empty($scheduled_at)) {
             $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
         }
@@ -124,8 +130,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 foreach ($platforms as $platform) {
-                    $stmt = $conn->prepare("INSERT INTO post_platforms (post_id, platform, status) VALUES (?, ?, 'pending')");
-                    $stmt->execute([$post_id, $platform]);
+                    // comments_enabled only actually matters for instagram/tiktok in
+                    // SocialMediaManager -- other platforms store it but ignore it.
+                    $commentsEnabled = 1;
+                    if ($platform === 'instagram') $commentsEnabled = $instagram_comments_enabled;
+                    if ($platform === 'tiktok') $commentsEnabled = $tiktok_comments_enabled;
+
+                    $stmt = $conn->prepare("INSERT INTO post_platforms (post_id, platform, status, comments_enabled) VALUES (?, ?, 'pending', ?)");
+                    $stmt->execute([$post_id, $platform, $commentsEnabled]);
                 }
 
                 $conn->commit();
@@ -134,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     require_once 'includes/socialMediaManager.php';
                     $manager = new SocialMediaManager($conn);
                     $manager->sendPost($post_id);
-                    $success = 'Post successfully created and published!';
+                    $success = 'Post created! Publishing to each platform now -- check Post History for live status.';
                 } else {
                     $success = 'Post scheduled successfully!';
                 }
@@ -216,9 +228,23 @@ $platform_meta = [
                         <?php foreach ($connected as $platform => $account_name): ?>
                             <?php if (isset($platform_meta[$platform])): ?>
                                 <label class="platform-checkbox">
-                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
+                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>" data-platform="<?php echo htmlspecialchars($platform); ?>" class="platform-toggle-checkbox">
                                     <span><?php echo $platform_meta[$platform]['icon']; ?> <?php echo htmlspecialchars($platform_meta[$platform]['label']); ?> (<?php echo htmlspecialchars($account_name); ?>)</span>
                                 </label>
+
+                                <?php if ($platform === 'instagram'): ?>
+                                    <label class="platform-comment-toggle" id="instagram-comment-toggle" style="display:none; margin-left:28px; font-size:0.9em;">
+                                        <input type="checkbox" name="instagram_comments" checked>
+                                        Allow comments on Instagram
+                                    </label>
+                                <?php endif; ?>
+
+                                <?php if ($platform === 'tiktok'): ?>
+                                    <label class="platform-comment-toggle" id="tiktok-comment-toggle" style="display:none; margin-left:28px; font-size:0.9em;">
+                                        <input type="checkbox" name="tiktok_comments" checked>
+                                        Allow comments on TikTok
+                                    </label>
+                                <?php endif; ?>
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
@@ -233,6 +259,18 @@ $platform_meta = [
             </form>
         <?php endif; ?>
     </div>
+
+    <!-- Show/hide the comment toggle for a platform only when that platform is checked -->
+    <script>
+    document.querySelectorAll('.platform-toggle-checkbox').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var toggleRow = document.getElementById(this.dataset.platform + '-comment-toggle');
+            if (toggleRow) {
+                toggleRow.style.display = this.checked ? 'block' : 'none';
+            }
+        });
+    });
+    </script>
 
     <!-- --- CLIENT SIDE IMAGE COMPRESSION SCRIPT (NO EXTERNAL LIBRARIES!) --- -->
     <script>

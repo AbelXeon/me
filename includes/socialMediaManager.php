@@ -14,10 +14,54 @@ class SocialMediaManager {
     }
 
     /**
-     * Main function to process a post for all selected platforms
+     * Entry point: fires off one non-blocking background request per selected
+     * platform instead of processing them one-after-another in this request.
+     * Each platform then finishes independently (in parallel) via processPlatform(),
+     * called from post-worker.php. This is what cuts the total wait time down --
+     * previously a 5-platform post waited for each platform's full network +
+     * processing time back to back; now they all run at the same time.
+     *
+     * NOTE: because platforms now finish asynchronously, post_platforms rows stay
+     * 'pending' until each one's background worker completes it. Post History will
+     * show each platform flipping to Posted/Failed as it finishes, rather than all
+     * appearing at once.
      */
     public function sendPost($postId) {
-        // 1. Fetch post details
+        $stmt = $this->db->prepare("SELECT platform FROM post_platforms WHERE post_id = ? AND status = 'pending'");
+        $stmt->execute([$postId]);
+        $platforms = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($platforms)) return false;
+
+        $secret = getenv('INTERNAL_WORKER_SECRET') ?: 'change-me-internal-secret';
+        $baseUrl = getenv('APP_BASE_URL') ?: 'https://me-wpv3.onrender.com';
+
+        foreach ($platforms as $platform) {
+            $url = rtrim($baseUrl, '/') . '/post-worker.php?' . http_build_query([
+                'post_id'  => $postId,
+                'platform' => $platform,
+                'token'    => $secret
+            ]);
+            $dispatched = $this->dispatchAsync($url);
+
+            if (!$dispatched) {
+                // Async dispatch failed (network restriction, etc.) -- process this
+                // one platform synchronously right here so it doesn't just sit as
+                // 'pending' forever. This is slower for that platform only, but safe.
+                $this->processPlatform($postId, $platform);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Processes ONE platform for ONE post. This contains exactly the same logic
+     * that used to live inline inside sendPost()'s foreach loop -- unchanged
+     * behavior, just callable independently per platform so it can run in its
+     * own background request. Called by post-worker.php.
+     */
+    public function processPlatform($postId, $platform) {
         $stmt = $this->db->prepare("
             SELECT p.*, m.path as media_path, m.type as media_file_type 
             FROM posts p 
@@ -26,42 +70,39 @@ class SocialMediaManager {
         ");
         $stmt->execute([$postId]);
         $post = $stmt->fetch();
-
         if (!$post) return false;
 
-        // 2. Fetch platforms for this post that are 'pending'
-        $stmt = $this->db->prepare("SELECT platform FROM post_platforms WHERE post_id = ? AND status = 'pending'");
-        $stmt->execute([$postId]);
-        $platforms = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        // Pull the per-platform comments toggle (only meaningful for tiktok/instagram)
+        $stmtRow = $this->db->prepare("SELECT comments_enabled FROM post_platforms WHERE post_id = ? AND platform = ?");
+        $stmtRow->execute([$postId, $platform]);
+        $commentsEnabledRaw = $stmtRow->fetchColumn();
+        $commentsEnabled = ($commentsEnabledRaw === false || $commentsEnabledRaw === null) ? true : (bool)$commentsEnabledRaw;
 
-        foreach ($platforms as $platform) {
-            $success = false;
-            $platform_post_id = null;
-            $error_message = null;
+        $success = false;
+        $platform_post_id = null;
+        $error_message = null;
 
-            if ($platform === 'telegram') {
-                $success = $this->postToTelegram($post, $platform_post_id, $error_message);
-            } elseif ($platform === 'tiktok') {
-                $success = $this->postToTikTok($post, $platform_post_id, $error_message);
-            } elseif ($platform === 'facebook') {
-                $success = $this->postToFacebook($post, $platform_post_id, $error_message);
-            } elseif ($platform === 'instagram') {
-                $success = $this->postToInstagram($post, $platform_post_id, $error_message);
-            } elseif ($platform === 'linkedin') {
-                $success = $this->postToLinkedIn($post, $platform_post_id, $error_message);
-            }
-
-            // Update status in database
-            $status = $success ? 'posted' : 'failed';
-            $stmtUpdate = $this->db->prepare("
-                UPDATE post_platforms 
-                SET status = ?, platform_post_id = ?, posted_at = CURRENT_TIMESTAMP, error_message = ? 
-                WHERE post_id = ? AND platform = ?
-            ");
-            $stmtUpdate->execute([$status, $platform_post_id, $error_message, $postId, $platform]);
+        if ($platform === 'telegram') {
+            $success = $this->postToTelegram($post, $platform_post_id, $error_message);
+        } elseif ($platform === 'tiktok') {
+            $success = $this->postToTikTok($post, $platform_post_id, $error_message, $commentsEnabled);
+        } elseif ($platform === 'facebook') {
+            $success = $this->postToFacebook($post, $platform_post_id, $error_message);
+        } elseif ($platform === 'instagram') {
+            $success = $this->postToInstagram($post, $platform_post_id, $error_message, $commentsEnabled);
+        } elseif ($platform === 'linkedin') {
+            $success = $this->postToLinkedIn($post, $platform_post_id, $error_message);
         }
 
-        // Update main post status if all platforms are processed
+        $status = $success ? 'posted' : 'failed';
+        $stmtUpdate = $this->db->prepare("
+            UPDATE post_platforms 
+            SET status = ?, platform_post_id = ?, posted_at = CURRENT_TIMESTAMP, error_message = ? 
+            WHERE post_id = ? AND platform = ?
+        ");
+        $stmtUpdate->execute([$status, $platform_post_id, $error_message, $postId, $platform]);
+
+        // Update main post status once every platform for this post has finished
         $stmtCheck = $this->db->prepare("SELECT COUNT(*) FROM post_platforms WHERE post_id = ? AND status = 'pending'");
         $stmtCheck->execute([$postId]);
         if ($stmtCheck->fetchColumn() == 0) {
@@ -72,6 +113,40 @@ class SocialMediaManager {
             $stmtMain = $this->db->prepare("UPDATE posts SET status = ?, published_at = CURRENT_TIMESTAMP WHERE id = ?");
             $stmtMain->execute([$finalStatus, $postId]);
         }
+
+        return $success;
+    }
+
+    /**
+     * Fires an HTTP request and returns immediately without waiting for the
+     * response ("fire and forget"). Used to kick off each platform's posting
+     * job as an independent, parallel background request instead of blocking
+     * the current request until it finishes.
+     */
+    private function dispatchAsync($url) {
+        $parts = parse_url($url);
+        if (!$parts || empty($parts['host'])) return false;
+
+        $isHttps = (($parts['scheme'] ?? 'https') === 'https');
+        $host = $parts['host'];
+        $port = $parts['port'] ?? ($isHttps ? 443 : 80);
+        $path = ($parts['path'] ?? '/') . (isset($parts['query']) ? '?' . $parts['query'] : '');
+
+        $context = stream_context_create([
+            'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
+        ]);
+
+        $remote = ($isHttps ? 'ssl://' : 'tcp://') . $host . ':' . $port;
+        $fp = @stream_socket_client($remote, $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $context);
+        if (!$fp) return false; // dispatch failed -- caller should fall back to sync processing
+
+        $request  = "GET {$path} HTTP/1.1\r\n";
+        $request .= "Host: {$host}\r\n";
+        $request .= "Connection: Close\r\n\r\n";
+
+        fwrite($fp, $request);
+        fclose($fp); // close immediately -- we don't wait for or read the response
+        return true;
     }
 
     /**
@@ -164,7 +239,7 @@ class SocialMediaManager {
     /**
      * Publishes a video to TikTok's Content Posting API v2
      */
-    private function postToTikTok($post, &$platform_post_id, &$error_message) {
+    private function postToTikTok($post, &$platform_post_id, &$error_message, $commentsEnabled = true) {
         $stmt = $this->db->prepare("SELECT id, access_token, refresh_token, token_expires_at FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
         $stmt->execute([$post['user_id']]);
         $account = $stmt->fetch();
@@ -220,7 +295,7 @@ class SocialMediaManager {
                 'privacy_level' => 'SELF_ONLY',
                 'disable_duet' => false,
                 'disable_stitch' => false,
-                'disable_comment' => false
+                'disable_comment' => !$commentsEnabled
             ],
             'source_info' => [
                 'source' => 'PULL_FROM_URL',
@@ -426,7 +501,7 @@ class SocialMediaManager {
     /**
      * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
      */
-    private function postToInstagram($post, &$platform_post_id, &$error_message) {
+    private function postToInstagram($post, &$platform_post_id, &$error_message, $commentsEnabled = true) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
         $stmt->execute([$post['user_id']]);
         $account = $stmt->fetch();
@@ -534,6 +609,15 @@ class SocialMediaManager {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
+
+                // Instagram only allows toggling comments AFTER the media is published
+                // (it needs the real media id, which only exists once posted). Default
+                // behavior (comments enabled) needs no extra call -- only fire this when
+                // the user explicitly disabled comments.
+                if (!$commentsEnabled) {
+                    $this->setInstagramCommentsEnabled($publishResult['id'], $pageAccessToken, false);
+                }
+
                 return true;
             }
 
@@ -610,6 +694,11 @@ class SocialMediaManager {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
+
+                if (!$commentsEnabled) {
+                    $this->setInstagramCommentsEnabled($publishResult['id'], $pageAccessToken, false);
+                }
+
                 return true;
             }
 
@@ -620,6 +709,25 @@ class SocialMediaManager {
             $error_message = $e->getMessage();
             return false;
         }
+    }
+
+    /**
+     * Toggles comments on an already-published Instagram media item.
+     * Best-effort: if this call fails, it does NOT fail the whole post --
+     * the media is already live, we just log nothing further and move on.
+     */
+    private function setInstagramCommentsEnabled($mediaId, $accessToken, $enabled) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$mediaId}");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, [
+            'comment_enabled' => $enabled ? 'true' : 'false',
+            'access_token'    => $accessToken
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
     }
 
     /**
