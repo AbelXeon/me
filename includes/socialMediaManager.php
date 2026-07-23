@@ -570,6 +570,8 @@ class SocialMediaManager {
         $mediaItems = $this->getPostMediaItems($post);
         $uploadedAssets = [];
         $isVideoPost = false;
+        $hasVideoItem = false;
+        $videoDebugReason = null; // captures WHY video processing stopped, for real debugging
 
         // LinkedIn API version used for the versioned /rest/ endpoints (video upload).
         // Bump roughly yearly -- LinkedIn supports each version for about 12 months.
@@ -616,6 +618,7 @@ class SocialMediaManager {
                     // /v2/videos does not exist, which is why this silently failed before.
                     // Videos also use chunked/multipart upload + a required finalize step,
                     // unlike the single-shot image upload above.
+                    $hasVideoItem = true;
                     $chInit = curl_init("https://api.linkedin.com/rest/videos?action=initializeUpload");
                     curl_setopt($chInit, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($chInit, CURLOPT_POST, 1);
@@ -634,6 +637,7 @@ class SocialMediaManager {
                         "X-Restli-Protocol-Version: 2.0.0"
                     ]);
                     $initResponse = curl_exec($chInit);
+                    $initHttpCode = curl_getinfo($chInit, CURLINFO_HTTP_CODE);
                     curl_close($chInit);
 
                     $initResult = json_decode($initResponse, true);
@@ -642,8 +646,10 @@ class SocialMediaManager {
                     $uploadToken = $initResult['value']['uploadToken'] ?? '';
 
                     if (empty($uploadInstructions) || !$videoUrn) {
-                        // Initialization failed -- skip this item, it'll fall through
-                        // to the article-link fallback if nothing else attaches.
+                        // Initialization failed -- capture LinkedIn's actual response so
+                        // we know why (bad scope, app not approved, invalid owner urn, etc.)
+                        $apiError = $initResult['message'] ?? json_encode($initResult);
+                        $videoDebugReason = "Video init failed (HTTP {$initHttpCode}): " . $apiError;
                         continue;
                     }
 
@@ -660,6 +666,7 @@ class SocialMediaManager {
 
                         if (!$chunkUploadUrl) {
                             $uploadOk = false;
+                            $videoDebugReason = "Video chunk upload aborted: missing uploadUrl in LinkedIn's initializeUpload response.";
                             break;
                         }
 
@@ -681,6 +688,7 @@ class SocialMediaManager {
 
                         if ($putHttpCode < 200 || $putHttpCode >= 300) {
                             $uploadOk = false;
+                            $videoDebugReason = "Video chunk PUT failed with HTTP {$putHttpCode}.";
                             break;
                         }
 
@@ -712,11 +720,12 @@ class SocialMediaManager {
                         "LinkedIn-Version: {$linkedinVersion}",
                         "X-Restli-Protocol-Version: 2.0.0"
                     ]);
-                    curl_exec($chFinalize);
+                    $finalizeResponse = curl_exec($chFinalize);
                     $finalizeHttpCode = curl_getinfo($chFinalize, CURLINFO_HTTP_CODE);
                     curl_close($chFinalize);
 
                     if ($finalizeHttpCode < 200 || $finalizeHttpCode >= 300) {
+                        $videoDebugReason = "Video finalizeUpload failed (HTTP {$finalizeHttpCode}): " . $finalizeResponse;
                         continue;
                     }
 
@@ -751,12 +760,23 @@ class SocialMediaManager {
                     if ($isReady) {
                         $uploadedAssets[] = $videoUrn;
                         $isVideoPost = true;
+                    } else {
+                        $videoDebugReason = "Video never reached AVAILABLE status (last status: {$status}). It may need more processing time, or the upload failed server-side.";
                     }
                 }
             } catch (Exception $e) {
+                $videoDebugReason = "Exception during video processing: " . $e->getMessage();
                 continue;
             }
             if ($isVideoPost) break; // LinkedIn supports only one video per post
+        }
+
+        // If the post included a video but it never successfully attached, fail here
+        // with the real reason instead of silently publishing caption-only text and
+        // reporting "posted" as if the video worked.
+        if ($hasVideoItem && !$isVideoPost) {
+            $error_message = $videoDebugReason ?? "LinkedIn video upload failed for an unknown reason.";
+            return false;
         }
 
         $payload = [
