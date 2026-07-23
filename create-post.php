@@ -30,6 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
+
+        // UPDATED: Capture comment disable toggle
+        $disable_comments = isset($_POST['disable_comments']) ? 1 : 0;
         
         if (!empty($scheduled_at)) {
             $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
@@ -112,8 +115,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_scheduled = !empty($scheduled_at);
                 $post_status = $is_scheduled ? 'scheduled' : 'draft';
 
-                $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null]);
+                // UPDATED: Added disable_comments to the INSERT query
+                $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at, disable_comments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null, $disable_comments]);
                 $post_id = $conn->lastInsertId();
 
                 if (count($uploaded_media_ids) > 1) {
@@ -216,12 +220,20 @@ $platform_meta = [
                         <?php foreach ($connected as $platform => $account_name): ?>
                             <?php if (isset($platform_meta[$platform])): ?>
                                 <label class="platform-checkbox">
-                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
+                                    <input type="checkbox" class="platform-selector" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
                                     <span><?php echo $platform_meta[$platform]['icon']; ?> <?php echo htmlspecialchars($platform_meta[$platform]['label']); ?> (<?php echo htmlspecialchars($account_name); ?>)</span>
                                 </label>
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
+                </div>
+
+                <!-- UPDATED: Dynamic toggle for comments -->
+                <div class="form-group" id="comment-toggle-container" style="display: none;">
+                    <label class="platform-checkbox">
+                        <input type="checkbox" name="disable_comments" value="1">
+                        <span>🚫 Disable comments (TikTok & Instagram)</span>
+                    </label>
                 </div>
 
                 <div class="form-group">
@@ -236,6 +248,19 @@ $platform_meta = [
 
     <!-- --- CLIENT SIDE IMAGE COMPRESSION SCRIPT (NO EXTERNAL LIBRARIES!) --- -->
     <script>
+    // Logic to show/hide the comment toggle [UPDATED]
+    document.querySelectorAll('.platform-selector').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const selected = Array.from(document.querySelectorAll('.platform-selector:checked')).map(cb => cb.value);
+            const toggle = document.getElementById('comment-toggle-container');
+            if (selected.includes('tiktok') || selected.includes('instagram')) {
+                toggle.style.display = 'block';
+            } else {
+                toggle.style.display = 'none';
+            }
+        });
+    });
+
     document.getElementById('postForm').addEventListener('submit', async function(e) {
         const fileInput = document.getElementById('mediaInput');
         if (!fileInput.files.length) return;

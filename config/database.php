@@ -11,7 +11,7 @@ require_once __DIR__ . '/../includes/env.php';
 define('DB_DRIVER', getenv('DB_DRIVER') ?: 'sqlite');
 define('DB_PATH',   __DIR__ . '/../' . (getenv('DB_PATH') ?: 'database/social_manager.sqlite'));
 define('DB_HOST',   getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT',   getenv('DB_PORT') ?: '5432'); // <-- ADDED PORT CONSTANT
+define('DB_PORT',   getenv('DB_PORT') ?: '5432'); 
 define('DB_NAME',   getenv('DB_NAME') ?: 'social_manager');
 define('DB_USER',   getenv('DB_USER') ?: 'root');
 define('DB_PASS',   getenv('DB_PASS') ?: '');

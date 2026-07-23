@@ -36,7 +36,7 @@ if ($driver === 'sqlite') {
             phone_no        TEXT,
             profile_image   TEXT,
             account_status  TEXT NOT NULL DEFAULT 'pending'
-                                CHECK (account_status IN ('active','suspended','pending','deleted')),
+                            CHECK (account_status IN ('active','suspended','pending','deleted')),
             created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -197,6 +197,7 @@ SQL;
             external_link   TEXT,
             media_type      VARCHAR(50) NOT NULL CHECK (media_type IN ('image','video')),
             media_id        INTEGER NOT NULL,
+            disable_comments TINYINT(1) NOT NULL DEFAULT 0,
             status          VARCHAR(50) NOT NULL DEFAULT 'draft'
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP,
