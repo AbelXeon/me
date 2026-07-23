@@ -220,7 +220,7 @@ class SocialMediaManager {
                 'privacy_level' => 'SELF_ONLY',
                 'disable_duet' => false,
                 'disable_stitch' => false,
-                'disable_comment' => ($post['disable_comments'] == 1) // UPDATED: Logic for comments toggle
+                'disable_comment' => false
             ],
             'source_info' => [
                 'source' => 'PULL_FROM_URL',
@@ -534,18 +534,6 @@ class SocialMediaManager {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
-                
-                // UPDATED: Added Logic to disable comments on IG after posting
-                if ($post['disable_comments'] == 1) {
-                    $chDisable = curl_init();
-                    curl_setopt($chDisable, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$platform_post_id}?comment_enabled=false&access_token=" . urlencode($pageAccessToken));
-                    curl_setopt($chDisable, CURLOPT_POST, 1);
-                    curl_setopt($chDisable, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($chDisable, CURLOPT_SSL_VERIFYPEER, false);
-                    curl_exec($chDisable);
-                    curl_close($chDisable);
-                }
-
                 return true;
             }
 
@@ -622,18 +610,6 @@ class SocialMediaManager {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
-                
-                // UPDATED: Added Logic to disable comments on IG Carousel after posting
-                if ($post['disable_comments'] == 1) {
-                    $chDisable = curl_init();
-                    curl_setopt($chDisable, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$platform_post_id}?comment_enabled=false&access_token=" . urlencode($pageAccessToken));
-                    curl_setopt($chDisable, CURLOPT_POST, 1);
-                    curl_setopt($chDisable, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($chDisable, CURLOPT_SSL_VERIFYPEER, false);
-                    curl_exec($chDisable);
-                    curl_close($chDisable);
-                }
-
                 return true;
             }
 

@@ -3,18 +3,13 @@
 
 require_once 'config/database.php';
 
-// SECURITY CHECK: Prevents unauthorized database resets
-$secret_key = "social_admin_77"; 
-if (($_GET['key'] ?? '') !== $secret_key) {
-    die("<h2>❌ Unauthorized: Secret key required.</h2>");
-}
-
 $driver = defined('DB_DRIVER') ? DB_DRIVER : 'sqlite';
 
 if ($driver === 'sqlite') {
     $dbFolder = __DIR__ . '/database';
     $dbPath = $dbFolder . '/social_manager.sqlite';
 
+    // 1. DROP THE SQLITE DATABASE FILE
     if (file_exists($dbPath)) {
         unlink($dbPath);
         echo "🗑️ Old SQLite database file deleted.<br>";
@@ -65,7 +60,6 @@ if ($driver === 'sqlite') {
             external_link   TEXT,
             media_type      TEXT NOT NULL CHECK (media_type IN ('image','video')),
             media_id        INTEGER NOT NULL,
-            disable_comments INTEGER NOT NULL DEFAULT 0,
             status          TEXT NOT NULL DEFAULT 'draft'
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP,
@@ -149,6 +143,7 @@ SQL;
     }
 
 } elseif ($driver === 'pgsql') {
+    // POSTGRESQL CODE PATH
     try {
         $pdo = getDBConnection();
 
@@ -202,7 +197,6 @@ SQL;
             external_link   TEXT,
             media_type      VARCHAR(50) NOT NULL CHECK (media_type IN ('image','video')),
             media_id        INTEGER NOT NULL,
-            disable_comments SMALLINT NOT NULL DEFAULT 0,
             status          VARCHAR(50) NOT NULL DEFAULT 'draft'
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP,
@@ -279,15 +273,17 @@ SQL;
 SQL;
 
         $pdo->exec($schema);
-        echo "<h2>✅ Fresh PostgreSQL Database created successfully on Render!</h2>";
+        echo "<h2>✅ Fresh PostgreSQL Database created successfully!</h2>";
 
     } catch (Exception $e) {
         die("<h2>❌ PostgreSQL Setup Failed:</h2> " . $e->getMessage());
     }
 } elseif ($driver === 'mysql') {
+    // MYSQL CODE PATH (FOR AIVEN)
     try {
         $pdo = getDBConnection();
 
+        // Disable checks temporarily to drop tables without dependency issues
         $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
         $pdo->exec("DROP TABLE IF EXISTS login_attempts;");
         $pdo->exec("DROP TABLE IF EXISTS post_platforms;");
@@ -337,7 +333,6 @@ SQL;
             external_link   TEXT,
             media_type      VARCHAR(50) NOT NULL CHECK (media_type IN ('image','video')),
             media_id        INT NOT NULL,
-            disable_comments TINYINT(1) NOT NULL DEFAULT 0,
             status          VARCHAR(50) NOT NULL DEFAULT 'draft'
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP NULL,
@@ -414,11 +409,9 @@ SQL;
 SQL;
 
         $pdo->exec($schema);
-        echo "<h2>✅ Fresh MySQL Database created successfully!</h2>";
+        echo "<h2>✅ Fresh MySQL Database created successfully on Aiven!</h2>";
 
     } catch (Exception $e) {
         die("<h2>❌ MySQL Setup Failed:</h2> " . $e->getMessage());
     }
 }
-
-
