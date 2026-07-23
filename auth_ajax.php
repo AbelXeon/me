@@ -111,6 +111,37 @@ try {
         exit;
     }
 
+    // Add this inside the try block in auth_ajax.php
+
+if ($action === 'change_password') {
+    // 1. Ensure user is logged in
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
+        exit;
+    }
+
+    $userId = $_SESSION['user_id'];
+    $currentInput = $_POST['current_password'] ?? '';
+    $newPass = $_POST['new_password'] ?? '';
+
+    // 2. Fetch current password from DB
+    $stmt = $conn->prepare("SELECT password FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+
+    if ($user && password_verify($currentInput, $user['password'])) {
+        // 3. Current password is correct, hash and update
+        $newHashed = password_hash($newPass, PASSWORD_DEFAULT);
+        $update = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $update->execute([$newHashed, $userId]);
+
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Current password is incorrect.']);
+    }
+    exit;
+    }
+
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Server Error: ' . $e->getMessage()]);
 }
