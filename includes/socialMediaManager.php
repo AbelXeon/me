@@ -165,7 +165,7 @@ class SocialMediaManager {
      * Publishes a video to TikTok's Content Posting API v2
      */
     private function postToTikTok($post, &$platform_post_id, &$error_message) {
-        $stmt = $this->db->prepare("SELECT access_token FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
+        $stmt = $this->db->prepare("SELECT id, access_token, refresh_token, token_expires_at FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
         $stmt->execute([$post['user_id']]);
         $account = $stmt->fetch();
 
@@ -179,6 +179,30 @@ class SocialMediaManager {
             return false;
         }
 
+        // TikTok access tokens expire after 24 hours (unlike LinkedIn's 60 days), so we
+        // proactively refresh whenever the stored token is expired or expiring within the
+        // next 5 minutes, using the refresh_token captured at connect-time. This keeps
+        // TikTok posting working indefinitely without the user ever reconnecting.
+        $accessToken = $account['access_token'];
+        $needsRefresh = true;
+        if (!empty($account['token_expires_at'])) {
+            $needsRefresh = (strtotime($account['token_expires_at']) - time()) < 300;
+        }
+
+        if ($needsRefresh) {
+            if (empty($account['refresh_token'])) {
+                $error_message = "TikTok token expired and no refresh token is stored. Please reconnect TikTok in Settings.";
+                return false;
+            }
+
+            $refreshedToken = $this->refreshTikTokAccessToken($account);
+            if (!$refreshedToken) {
+                $error_message = "TikTok token expired and refreshing it failed. Please reconnect TikTok in Settings.";
+                return false;
+            }
+            $accessToken = $refreshedToken;
+        }
+
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
             $finalCaption .= "\n\n" . $post['external_link'];
@@ -189,8 +213,6 @@ class SocialMediaManager {
         $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
         $absoluteVideoUrl = $scheme . '://' . $host . '/' . $post['media_path'];
-
-        $accessToken = $account['access_token'];
 
         $payload = [
             'post_info' => [
@@ -229,6 +251,56 @@ class SocialMediaManager {
         $error_message = $result['error']['message'] ?? 'TikTok API Error';
         return false;
     }
+
+    /**
+     * Uses a stored refresh_token to obtain a fresh TikTok access token, and
+     * persists the new access_token/refresh_token/expiry back to social_accounts.
+     * TikTok rotates the refresh_token on every use, so the old one must be replaced too.
+     * Returns the new access token on success, or null on failure.
+     */
+    private function refreshTikTokAccessToken($account) {
+        $clientKey = getenv('TIKTOK_CLIENT_KEY');
+        $clientSecret = getenv('TIKTOK_CLIENT_SECRET');
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/oauth/token/");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'client_key'    => $clientKey,
+            'client_secret' => $clientSecret,
+            'grant_type'    => 'refresh_token',
+            'refresh_token' => $account['refresh_token']
+        ]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/x-www-form-urlencoded'
+        ]);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+        $tokenData = json_decode($response, true);
+
+        $newAccessToken  = $tokenData['access_token']  ?? ($tokenData['data']['access_token'] ?? null);
+        $newRefreshToken = $tokenData['refresh_token'] ?? ($tokenData['data']['refresh_token'] ?? null);
+        $expiresIn       = $tokenData['expires_in']    ?? ($tokenData['data']['expires_in'] ?? null);
+
+        if (!$newAccessToken) {
+            return null; // refresh_token itself may have expired (TikTok's is long-lived but not infinite)
+        }
+
+        $expiresAt = $expiresIn ? date('Y-m-d H:i:s', time() + $expiresIn) : null;
+
+        $stmtUpdate = $this->db->prepare("
+            UPDATE social_accounts 
+            SET access_token = ?, refresh_token = COALESCE(?, refresh_token), token_expires_at = ?
+            WHERE id = ?
+        ");
+        $stmtUpdate->execute([$newAccessToken, $newRefreshToken, $expiresAt, $account['id']]);
+
+        return $newAccessToken;
+    }
+
 
     /**
      * Publishes text and media (single or album) directly to Facebook Page Feed
@@ -415,7 +487,11 @@ class SocialMediaManager {
             }
 
             $isFinished = false;
-            $retries = 15; 
+            // Video (Reels) processing can take well over a minute for larger files --
+            // 15 retries * 3s (45s total) was only really enough for images/small clips.
+            // Bump to 60 retries * 5s = up to 5 minutes for video, keep it quicker for images.
+            $retries = $is_video ? 60 : 15;
+            $pollInterval = $is_video ? 5 : 3;
             while ($retries > 0) {
                 $chStatus = curl_init();
                 curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
@@ -434,7 +510,7 @@ class SocialMediaManager {
                     $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
                     return false;
                 }
-                sleep(3); 
+                sleep($pollInterval); 
                 $retries--;
             }
 
