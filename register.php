@@ -6,12 +6,12 @@ require_once 'includes/mailer.php';
 $error = '';
 $show_modal = false;
 
-// --- YOUR ORIGINAL CSRF TOKEN SETUP ---
+// --- CSRF TOKEN SETUP ---
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// --- YOUR ORIGINAL RATE LIMITER ---
+// --- RATE LIMITER ---
 if (!isset($_SESSION['register_attempts'])) {
     $_SESSION['register_attempts'] = 0;
 }
@@ -36,7 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $password   = $_POST['password'];
             $confirm    = $_POST['confirm_password'];
 
-            // VALIDATION (Including your original checks + Gmail check)
             if (empty($first_name) || empty($last_name) || empty($username) || empty($email) || empty($password)) {
                 $error = 'Please fill in all required fields';
             } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || !str_ends_with(strtolower($email), '@gmail.com')) {
@@ -50,7 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $conn = getDBConnection();
 
-                // Check if username or email already exists
                 $stmt = $conn->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
                 $stmt->execute([$username, $email]);
 
@@ -59,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-                    // Insert user as 'pending'
                     $stmt = $conn->prepare("INSERT INTO users (first_name, last_name, username, email, password, account_status) VALUES (?, ?, ?, ?, ?, 'pending')");
                     $stmt->execute([$first_name, $last_name, $username, $email, $hashed_password]);
 
@@ -67,21 +64,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $code = rand(100000, 999999);
                     $expires = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-                    // Save code to your email_verification table
                     $stmt = $conn->prepare("INSERT INTO email_verification (user_id, email, code, purpose, expires_at) VALUES (?, ?, ?, 'email_verify', ?)");
                     $stmt->execute([$userId, $email, $code, $expires]);
 
-                    // Send the email via Brevo
                     sendCodeEmail($email, $first_name, $code, 'email_verify');
 
                     $_SESSION['temp_user_id'] = $userId;
-                    $show_modal = true; // This triggers the blur/popup
+                    $show_modal = true;
                 }
             }
         }
     } 
     
-    // STEP 2: CODE VERIFICATION (From the Modal)
+    // STEP 2: CODE VERIFICATION
     elseif (isset($_POST['verify_step'])) {
         $entered_code = trim($_POST['verify_code']);
         $userId = $_SESSION['temp_user_id'] ?? null;
@@ -94,9 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$userId, $entered_code]);
             
             if ($stmt->fetch()) {
-                // Update code to used
                 $conn->prepare("UPDATE email_verification SET is_used = 1, verified_at = CURRENT_TIMESTAMP WHERE user_id = ? AND code = ?")->execute([$userId, $entered_code]);
-                // Set user to active
                 $conn->prepare("UPDATE users SET account_status = 'active' WHERE id = ?")->execute([$userId]);
                 
                 unset($_SESSION['temp_user_id']);
@@ -105,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
             } else {
                 $error = "Invalid or expired verification code.";
-                $show_modal = true; // Keep the modal open if they fail
+                $show_modal = true;
             }
         }
     }
@@ -120,12 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Create Account - Social Manager</title>
     <link rel="stylesheet" href="assets/css/register.css">
     <style>
-        /* MODAL & BLUR STYLING */
         .modal-overlay {
             display: <?php echo $show_modal ? 'flex' : 'none'; ?>;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(10px); /* This creates the blur background */
+            backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             justify-content: center; align-items: center; z-index: 9999;
         }
@@ -136,8 +128,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .code-input {
             font-size: 32px; letter-spacing: 10px; text-align: center;
             width: 100%; margin: 25px 0; border: 2px solid #007bff; border-radius: 10px;
-            padding: 10px;
+            padding: 10px; box-sizing: border-box;
         }
+        .resend-btn {
+            background: none; border: none; color: #007bff; font-weight: bold;
+            cursor: pointer; margin-top: 15px; text-decoration: underline; font-size: 14px;
+        }
+        .resend-btn:disabled {
+            color: #aaa; cursor: not-allowed; text-decoration: none;
+        }
+        .resend-msg { font-size: 13px; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -199,18 +199,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- VERIFICATION MODAL (The Popup) -->
+    <!-- VERIFICATION MODAL -->
     <div id="verifyModal" class="modal-overlay">
         <div class="modal-card">
             <h2>Check Your Email</h2>
             <p>We've sent a 6-digit code to your Gmail. Please enter it below to verify your account.</p>
+            
             <form method="POST">
                 <input type="hidden" name="verify_step" value="1">
-                <input type="text" name="verify_code" class="code-input" maxlength="6" placeholder="000000" required autofocus>
+                <input type="text" name="verify_code" class="code-input" maxlength="6" placeholder="000000" required autofocus autocomplete="off">
                 <button type="submit" class="btn-register" style="width: 100%;">Verify & Complete</button>
             </form>
+
+            <!-- RESEND CODE SECTION WITH TIMER -->
+            <div>
+                <button type="button" id="resendBtn" class="resend-btn" onclick="resendCode()" disabled>Resend Code (60s)</button>
+                <div id="resendMsg" class="resend-msg"></div>
+            </div>
         </div>
     </div>
 
+    <script>
+        let timer = 60;
+        let countdownInterval;
+
+        function startTimer() {
+            const resendBtn = document.getElementById('resendBtn');
+            resendBtn.disabled = true;
+            timer = 60;
+
+            countdownInterval = setInterval(() => {
+                timer--;
+                resendBtn.innerText = `Resend Code (${timer}s)`;
+                if (timer <= 0) {
+                    clearInterval(countdownInterval);
+                    resendBtn.innerText = "Resend Code";
+                    resendBtn.disabled = false;
+                }
+            }, 1000);
+        }
+
+        function resendCode() {
+            const msgDiv = document.getElementById('resendMsg');
+            msgDiv.style.color = "#333";
+            msgDiv.innerText = "Sending new code...";
+
+            fetch('auth_ajax.php?action=resend_registration_code')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    msgDiv.style.color = "green";
+                    msgDiv.innerText = data.message;
+                    startTimer(); // Restart 60s timer
+                } else {
+                    msgDiv.style.color = "red";
+                    msgDiv.innerText = data.message;
+                }
+            })
+            .catch(err => {
+                msgDiv.style.color = "red";
+                msgDiv.innerText = "Network error. Try again.";
+            });
+        }
+
+        // Start timer automatically when modal opens
+        <?php if ($show_modal): ?>
+            window.onload = function() {
+                startTimer();
+            };
+        <?php endif; ?>
+    </script>
 </body>
 </html>
