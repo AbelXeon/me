@@ -112,34 +112,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
     </div>
 
     <script>
-        function openForgotModal() { document.getElementById('forgotModal').style.display = 'flex'; }
-        function closeForgotModal() { document.getElementById('forgotModal').style.display = 'none'; }
+    function openForgotModal() { document.getElementById('forgotModal').style.display = 'flex'; }
+    function closeForgotModal() { document.getElementById('forgotModal').style.display = 'none'; }
 
-        function sendResetCode() {
-            const email = document.getElementById('forgot_email').value;
-            fetch('auth_ajax.php?action=send_reset&email=' + encodeURIComponent(email))
-            .then(r => r.json()).then(data => {
-                if(data.success) {
-                    document.getElementById('step1').classList.add('hidden');
-                    document.getElementById('step2').classList.remove('hidden');
-                } else { alert(data.message); }
-            });
-        }
+    function sendResetCode() {
+        const email = document.getElementById('forgot_email').value;
+        const btn = document.querySelector("#step1 .btn-login");
+        
+        if(!email) { alert("Please enter your email"); return; }
+        
+        btn.innerText = "Sending...";
+        btn.disabled = true;
 
-        function verifyAndReset() {
-            const email = document.getElementById('forgot_email').value;
-            const code = document.getElementById('reset_code').value;
-            const pass = document.getElementById('new_pass').value;
-            fetch('auth_ajax.php?action=complete_reset', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: `email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&password=${encodeURIComponent(pass)}`
-            })
-            .then(r => r.json()).then(data => {
-                if(data.success) { alert('Password Updated!'); window.location.reload(); }
-                else { alert(data.message); }
-            });
-        }
-    </script>
+        fetch('auth_ajax.php?action=send_reset&email=' + encodeURIComponent(email))
+        .then(response => {
+            if (!response.ok) { throw new Error('Network response was not ok'); }
+            return response.json();
+        })
+        .then(data => {
+            btn.innerText = "Send Code";
+            btn.disabled = false;
+            if(data.success) {
+                document.getElementById('step1').classList.add('hidden');
+                document.getElementById('step2').classList.remove('hidden');
+            } else { 
+                alert(data.message); 
+            }
+        })
+        .catch(error => {
+            btn.innerText = "Send Code";
+            btn.disabled = false;
+            console.error('Error:', error);
+            alert("Something went wrong. Check the browser console (F12) for details.");
+        });
+    }
+
+    function verifyAndReset() {
+        const email = document.getElementById('forgot_email').value;
+        const code = document.getElementById('reset_code').value;
+        const pass = document.getElementById('new_pass').value;
+        
+        if(!code || !pass) { alert("Please fill all fields"); return; }
+
+        fetch('auth_ajax.php?action=complete_reset', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&password=${encodeURIComponent(pass)}`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.success) { 
+                alert('Password Updated Successfully!'); 
+                window.location.href = 'login.php'; 
+            } else { 
+                alert(data.message); 
+            }
+        })
+        .catch(err => alert("Error completing reset."));
+    }
+</script>
 </body>
 </html>
