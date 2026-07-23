@@ -675,6 +675,14 @@ class SocialMediaManager {
                         curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
                         curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
                         curl_setopt($chPut, CURLOPT_POSTFIELDS, $chunkData);
+                        // NOTE: without an explicit Content-Type, curl defaults PUT bodies to
+                        // application/x-www-form-urlencoded, which LinkedIn's pre-signed upload
+                        // URL will often reject with a 400. Set it explicitly like the (working)
+                        // image upload above does.
+                        curl_setopt($chPut, CURLOPT_HTTPHEADER, [
+                            "Content-Type: video/mp4",
+                            "Content-Length: " . strlen($chunkData)
+                        ]);
                         curl_setopt($chPut, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$responseHeaders) {
                             $parts = explode(':', $headerLine, 2);
                             if (count($parts) === 2) {
@@ -682,13 +690,17 @@ class SocialMediaManager {
                             }
                             return strlen($headerLine);
                         });
-                        curl_exec($chPut);
+                        $putResponseBody = curl_exec($chPut);
                         $putHttpCode = curl_getinfo($chPut, CURLINFO_HTTP_CODE);
                         curl_close($chPut);
 
                         if ($putHttpCode < 200 || $putHttpCode >= 300) {
                             $uploadOk = false;
-                            $videoDebugReason = "Video chunk PUT failed with HTTP {$putHttpCode}.";
+                            // Include LinkedIn's actual response body so we know the real
+                            // reason (signature mismatch, size mismatch, expired URL, etc.)
+                            // instead of just the bare status code.
+                            $bodySnippet = $putResponseBody ? substr($putResponseBody, 0, 300) : '(empty response body)';
+                            $videoDebugReason = "Video chunk PUT failed with HTTP {$putHttpCode}: {$bodySnippet}";
                             break;
                         }
 
