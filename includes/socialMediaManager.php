@@ -571,6 +571,10 @@ class SocialMediaManager {
         $uploadedAssets = [];
         $isVideoPost = false;
 
+        // LinkedIn API version used for the versioned /rest/ endpoints (video upload).
+        // Bump roughly yearly -- LinkedIn supports each version for about 12 months.
+        $linkedinVersion = '202606';
+
         // 1. Process all media attachments
         foreach ($mediaItems as $item) {
             $mediaPath = realpath(__DIR__ . '/../' . $item['path']);
@@ -582,6 +586,7 @@ class SocialMediaManager {
 
             try {
                 if ($isImage) {
+                    // --- IMAGE UPLOAD (unchanged, already working) ---
                     $ch = curl_init("https://api.linkedin.com/v2/images?action=initializeUpload");
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_POST, 1);
@@ -593,44 +598,165 @@ class SocialMediaManager {
                     $uploadUrl = $resp['value']['uploadUrl'] ?? null;
                     $assetUrn = $resp['value']['image'] ?? null;
                     $contentType = "image/jpeg";
+
+                    if ($uploadUrl && $assetUrn) {
+                        $chPut = curl_init($uploadUrl);
+                        curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
+                        curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
+                        curl_setopt($chPut, CURLOPT_HTTPHEADER, ["Content-Type: {$contentType}"]);
+                        curl_exec($chPut);
+                        curl_close($chPut);
+
+                        $uploadedAssets[] = $assetUrn;
+                    }
                 } else {
-                    $ch = curl_init("https://api.linkedin.com/v2/videos?action=initializeUpload");
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_POST, 1);
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                    // --- VIDEO UPLOAD (fixed) ---
+                    // Videos MUST go through the versioned /rest/videos endpoint --
+                    // /v2/videos does not exist, which is why this silently failed before.
+                    // Videos also use chunked/multipart upload + a required finalize step,
+                    // unlike the single-shot image upload above.
+                    $chInit = curl_init("https://api.linkedin.com/rest/videos?action=initializeUpload");
+                    curl_setopt($chInit, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($chInit, CURLOPT_POST, 1);
+                    curl_setopt($chInit, CURLOPT_POSTFIELDS, json_encode([
                         'initializeUploadRequest' => [
                             'owner' => $urnOwner,
                             'fileSizeBytes' => $fileSize,
-                            'uploadCaptions' => [],
-                            'uploadShareThumbnail' => false
+                            'uploadCaptions' => false,
+                            'uploadThumbnail' => false
                         ]
                     ]));
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer {$accessToken}", "Content-Type: application/json"]);
-                    $resp = json_decode(curl_exec($ch), true);
-                    curl_close($ch);
+                    curl_setopt($chInit, CURLOPT_HTTPHEADER, [
+                        "Authorization: Bearer {$accessToken}",
+                        "Content-Type: application/json",
+                        "LinkedIn-Version: {$linkedinVersion}",
+                        "X-Restli-Protocol-Version: 2.0.0"
+                    ]);
+                    $initResponse = curl_exec($chInit);
+                    curl_close($chInit);
 
-                    $uploadUrl = $resp['value']['uploadInstructions'][0]['uploadUrl'] ?? null;
-                    $assetUrn = $resp['value']['video'] ?? null;
-                    $contentType = "video/mp4";
-                    $isVideoPost = true;
-                }
+                    $initResult = json_decode($initResponse, true);
+                    $uploadInstructions = $initResult['value']['uploadInstructions'] ?? [];
+                    $videoUrn = $initResult['value']['video'] ?? null;
+                    $uploadToken = $initResult['value']['uploadToken'] ?? '';
 
-                if ($uploadUrl && $assetUrn) {
-                    $chPut = curl_init($uploadUrl);
-                    curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
-                    curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($chPut, CURLOPT_POSTFIELDS, $fileBinary);
-                    curl_setopt($chPut, CURLOPT_HTTPHEADER, ["Content-Type: {$contentType}"]);
-                    curl_exec($chPut);
-                    curl_close($chPut);
+                    if (empty($uploadInstructions) || !$videoUrn) {
+                        // Initialization failed -- skip this item, it'll fall through
+                        // to the article-link fallback if nothing else attaches.
+                        continue;
+                    }
 
-                    $uploadedAssets[] = $assetUrn;
-                    if (!$isImage) sleep(8); // Wait for video processing
+                    // Upload each chunk and collect its ETag (required for finalize)
+                    $uploadedPartIds = [];
+                    $uploadOk = true;
+
+                    foreach ($uploadInstructions as $instruction) {
+                        $chunkUploadUrl = $instruction['uploadUrl'] ?? null;
+                        $firstByte = $instruction['firstByte'] ?? 0;
+                        $lastByte = $instruction['lastByte'] ?? ($fileSize - 1);
+                        $chunkLength = ($lastByte - $firstByte) + 1;
+                        $chunkData = substr($fileBinary, $firstByte, $chunkLength);
+
+                        if (!$chunkUploadUrl) {
+                            $uploadOk = false;
+                            break;
+                        }
+
+                        $responseHeaders = [];
+                        $chPut = curl_init($chunkUploadUrl);
+                        curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
+                        curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($chPut, CURLOPT_POSTFIELDS, $chunkData);
+                        curl_setopt($chPut, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$responseHeaders) {
+                            $parts = explode(':', $headerLine, 2);
+                            if (count($parts) === 2) {
+                                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                            }
+                            return strlen($headerLine);
+                        });
+                        curl_exec($chPut);
+                        $putHttpCode = curl_getinfo($chPut, CURLINFO_HTTP_CODE);
+                        curl_close($chPut);
+
+                        if ($putHttpCode < 200 || $putHttpCode >= 300) {
+                            $uploadOk = false;
+                            break;
+                        }
+
+                        // ETag is required to finalize the upload
+                        $etag = $responseHeaders['etag'] ?? null;
+                        if ($etag) {
+                            $uploadedPartIds[] = trim($etag, '"');
+                        }
+                    }
+
+                    if (!$uploadOk) {
+                        continue; // skip this media item, falls through to fallback below
+                    }
+
+                    // Finalize the video upload
+                    $chFinalize = curl_init("https://api.linkedin.com/rest/videos?action=finalizeUpload");
+                    curl_setopt($chFinalize, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($chFinalize, CURLOPT_POST, 1);
+                    curl_setopt($chFinalize, CURLOPT_POSTFIELDS, json_encode([
+                        'finalizeUploadRequest' => [
+                            'video' => $videoUrn,
+                            'uploadToken' => $uploadToken,
+                            'uploadedPartIds' => $uploadedPartIds
+                        ]
+                    ]));
+                    curl_setopt($chFinalize, CURLOPT_HTTPHEADER, [
+                        "Authorization: Bearer {$accessToken}",
+                        "Content-Type: application/json",
+                        "LinkedIn-Version: {$linkedinVersion}",
+                        "X-Restli-Protocol-Version: 2.0.0"
+                    ]);
+                    curl_exec($chFinalize);
+                    $finalizeHttpCode = curl_getinfo($chFinalize, CURLINFO_HTTP_CODE);
+                    curl_close($chFinalize);
+
+                    if ($finalizeHttpCode < 200 || $finalizeHttpCode >= 300) {
+                        continue;
+                    }
+
+                    // Poll processing status until AVAILABLE before referencing it in a post
+                    $isReady = false;
+                    $retries = 20;
+                    while ($retries > 0) {
+                        $chStatus = curl_init("https://api.linkedin.com/rest/videos/" . urlencode($videoUrn));
+                        curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($chStatus, CURLOPT_HTTPHEADER, [
+                            "Authorization: Bearer {$accessToken}",
+                            "LinkedIn-Version: {$linkedinVersion}",
+                            "X-Restli-Protocol-Version: 2.0.0"
+                        ]);
+                        $statusResponse = curl_exec($chStatus);
+                        curl_close($chStatus);
+
+                        $statusResult = json_decode($statusResponse, true);
+                        $status = $statusResult['status'] ?? 'PROCESSING';
+
+                        if ($status === 'AVAILABLE') {
+                            $isReady = true;
+                            break;
+                        } elseif ($status === 'FAILED') {
+                            break;
+                        }
+
+                        sleep(3);
+                        $retries--;
+                    }
+
+                    if ($isReady) {
+                        $uploadedAssets[] = $videoUrn;
+                        $isVideoPost = true;
+                    }
                 }
             } catch (Exception $e) {
                 continue;
             }
-            if ($isVideoPost) break; // LinkedIn supports only one video
+            if ($isVideoPost) break; // LinkedIn supports only one video per post
         }
 
         $payload = [
