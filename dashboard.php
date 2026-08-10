@@ -3,7 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 require_once 'includes/auth_check.php';
-requireLogin(); 
+requireLogin();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -12,115 +12,161 @@ requireLogin();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Social Media Manager</title>
     <link rel="stylesheet" href="assets/css/dashboard.css">
-    <style>
-        /* Blurred Modal Styling */
-        .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); backdrop-filter: blur(10px);
-            justify-content: center; align-items: center; z-index: 9999;
-        }
-        .modal-card { background: white; padding: 40px; border-radius: 20px; width: 90%; max-width: 400px; text-align: center; }
-        .modal-card input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; }
-        .btn-action { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .btn-cancel { background: none; border: none; color: #666; cursor: pointer; margin-top: 15px; }
-        .link-change-pass { color: #667eea; text-decoration: none; font-size: 14px; font-weight: bold; cursor: pointer; }
-    </style>
 </head>
 
 <body>
-    <div class="header">
-        <h1>📱 Social Media Manager</h1>
-        <div class="user-info">
-            <span>Welcome, <strong><?php echo htmlspecialchars(getCurrentUsername()); ?></strong></span>
-            <!-- Change Password Link -->
-            <a href="javascript:void(0)" onclick="openChangePassModal()" class="link-change-pass">Change Password</a>
-            <a href="logout.php" class="btn-logout">Logout</a>
-        </div>
-    </div>
 
-    <div class="container">
-        <div class="welcome-card">
-            <h2>Welcome to Your Social Media Dashboard!</h2>
-            <p>Manage all your social media accounts from one place</p>
-        </div>
+    <div class="app-shell">
 
-        <div class="nav-cards">
-            <a href="create-post.php" class="nav-card">
-                <div class="icon">✍️</div>
-                <h3>Create Post</h3>
-                <p>Create and publish posts to multiple platforms</p>
-            </a>
-            <a href="settings.php" class="nav-card">
-                <div class="icon">⚙️</div>
-                <h3>Platform Settings</h3>
-                <p>Connect your social media accounts</p>
-            </a>
-            <a href="post-history.php" class="nav-card">
-                <div class="icon">📊</div>
-                <h3>Post History</h3>
-                <p>View all your published and scheduled posts</p>
-            </a>
-        </div>
-    </div>
+        <!-- ===================== SIDEBAR OVERLAY (mobile) ===================== -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-    <!-- CHANGE PASSWORD MODAL -->
-    <div id="changePassModal" class="modal-overlay">
-        <div class="modal-card">
-            <h2>Change Password</h2>
-            <p>Enter your details below to update your password.</p>
-            
-            <input type="password" id="curr_pass" placeholder="Current Password">
-            <input type="password" id="new_pass" placeholder="New Password (8+ chars)">
-            <input type="password" id="confirm_new_pass" placeholder="Confirm New Password">
-            
-            <button type="button" onclick="submitChangePassword()" class="btn-action" id="changeBtn">Update Password</button>
-            <button type="button" onclick="closeChangePassModal()" class="btn-cancel">Cancel</button>
-        </div>
+        <!-- ===================== SIDEBAR ===================== -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-mark">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a10 10 0 1 0 10 10"/>
+                        <path d="M12 6a6 6 0 1 0 6 6"/>
+                        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                    </svg>
+                </div>
+                <span>Social Manager</span>
+                <button type="button" class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"/>
+                        <path d="M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="sidebar-section-label">Menu</div>
+            <ul class="nav-list">
+                <li>
+                    <a href="dashboard.php" class="nav-item active">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+                            <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+                            <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+                            <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+                        </svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="create-post.php" class="nav-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                        Create Post
+                    </a>
+                </li>
+                <li>
+                    <a href="settings.php" class="nav-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+                        </svg>
+                        Platform Settings
+                    </a>
+                </li>
+                <li>
+                    <a href="post-history.php" class="nav-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 3v18h18"/>
+                            <rect x="7" y="12" width="3" height="6" rx="0.5"/>
+                            <rect x="12.5" y="8" width="3" height="10" rx="0.5"/>
+                            <rect x="18" y="5" width="3" height="13" rx="0.5"/>
+                        </svg>
+                        Post History
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <a href="logout.php" class="btn-logout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <path d="M16 17l5-5-5-5"/>
+                        <path d="M21 12H9"/>
+                    </svg>
+                    Logout
+                </a>
+            </div>
+        </aside>
+
+        <!-- ===================== MAIN CONTENT ===================== -->
+        <main class="main">
+
+            <div class="topbar">
+                <div class="topbar-left">
+                    <button type="button" class="hamburger-btn" onclick="openSidebar()" aria-label="Open menu">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"/>
+                            <path d="M3 12h18"/>
+                            <path d="M3 18h18"/>
+                        </svg>
+                    </button>
+                    <h1>Dashboard Overview</h1>
+                </div>
+
+                <div class="user-info">
+                    <span class="welcome">Welcome, <strong><?php echo htmlspecialchars(getCurrentUsername()); ?></strong></span>
+                </div>
+            </div>
+
+            <!-- Overview: coming soon -->
+            <div class="overview-panel">
+                <h2>Coming soon</h2>
+            </div>
+
+            <div class="nav-cards">
+                <a href="create-post.php" class="nav-card">
+                    <div class="icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                    </div>
+                    <h3>Create Post</h3>
+                    <p>Create and publish posts to multiple platforms</p>
+                </a>
+                <a href="settings.php" class="nav-card">
+                    <div class="icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+                        </svg>
+                    </div>
+                    <h3>Platform Settings</h3>
+                    <p>Connect your social media accounts</p>
+                </a>
+                <a href="post-history.php" class="nav-card">
+                    <div class="icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 3v18h18"/>
+                            <rect x="7" y="12" width="3" height="6" rx="0.5"/>
+                            <rect x="12.5" y="8" width="3" height="10" rx="0.5"/>
+                            <rect x="18" y="5" width="3" height="13" rx="0.5"/>
+                        </svg>
+                    </div>
+                    <h3>Post History</h3>
+                    <p>View all your published and scheduled posts</p>
+                </a>
+            </div>
+
+        </main>
     </div>
 
     <script>
-        function openChangePassModal() { document.getElementById('changePassModal').style.display = 'flex'; }
-        function closeChangePassModal() { 
-            document.getElementById('changePassModal').style.display = 'none'; 
-            // Clear inputs
-            document.getElementById('curr_pass').value = '';
-            document.getElementById('new_pass').value = '';
-            document.getElementById('confirm_new_pass').value = '';
+        function openSidebar() {
+            document.getElementById('sidebar').classList.add('open');
+            document.getElementById('sidebarOverlay').classList.add('open');
         }
-
-        function submitChangePassword() {
-            const curr = document.getElementById('curr_pass').value;
-            const np = document.getElementById('new_pass').value;
-            const cnp = document.getElementById('confirm_new_pass').value;
-            const btn = document.getElementById('changeBtn');
-
-            if(!curr || !np || !cnp) { alert("Please fill all fields"); return; }
-            if(np !== cnp) { alert("New passwords do not match"); return; }
-            if(np.length < 8) { alert("New password must be at least 8 characters"); return; }
-
-            btn.innerText = "Updating...";
-            btn.disabled = true;
-
-            fetch('auth_ajax.php?action=change_password', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: `current_password=${encodeURIComponent(curr)}&new_password=${encodeURIComponent(np)}`
-            })
-            .then(r => r.json())
-            .then(data => {
-                btn.innerText = "Update Password";
-                btn.disabled = false;
-                if(data.success) {
-                    alert("Password changed successfully!");
-                    closeChangePassModal();
-                } else {
-                    alert(data.message);
-                }
-            })
-            .catch(err => {
-                alert("Error connecting to server");
-                btn.disabled = false;
-            });
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('open');
         }
     </script>
 </body>
