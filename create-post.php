@@ -290,107 +290,131 @@ $platform_meta = [
                 <form id="postForm" method="POST" action="" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
-                    <div class="form-card">
-                        <div class="form-group">
-                            <label for="caption">Caption</label>
-                            <textarea id="caption" name="caption" rows="5" required placeholder="Write something worth posting..."><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
-                        </div>
+                    <div class="compose-grid">
 
-                        <div class="form-group">
-                            <label for="external_link">Links (Optional)</label>
-                            <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
-                            <small>Links will be appended to the end of the post.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-card">
-                        <div class="form-group">
-                            <label for="mediaInput">Media</label>
-
-                            <!-- Added id='mediaInput' here -->
-                            <input type="file" id="mediaInput" name="media[]" accept="image/*,video/*" multiple required class="file-input-hidden">
-
-                            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Select media files">
-                                <div class="dropzone-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M12 16V4"/>
-                                        <path d="M7 9l5-5 5 5"/>
-                                        <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
-                                    </svg>
+                        <div class="compose-main">
+                            <div class="form-card">
+                                <div class="form-group">
+                                    <label for="caption">Caption</label>
+                                    <textarea id="caption" name="caption" rows="5" required placeholder="Write something worth posting..."><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
                                 </div>
-                                <p class="dropzone-title">Click to upload or drag and drop</p>
-                                <p class="dropzone-hint">Images or videos, multiple files supported</p>
+
+                                <div class="form-group">
+                                    <label for="external_link">Links (Optional)</label>
+                                    <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
+                                    <small>Links will be appended to the end of the post.</small>
+                                </div>
                             </div>
 
-                            <div class="media-preview-grid" id="mediaPreviewGrid"></div>
-                        </div>
-                    </div>
+                            <div class="form-card">
+                                <div class="form-group">
+                                    <label for="mediaInput">Media</label>
 
-                    <div class="form-card">
-                        <div class="form-group">
-                            <label>Post to</label>
-                            <div class="platform-checkboxes">
-                                <?php foreach ($connected as $platform => $account_name): ?>
-                                    <?php if (isset($platform_meta[$platform])): ?>
-                                        <label class="platform-checkbox">
-                                            <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
-                                            <span class="platform-checkbox-inner">
-                                                <img src="<?php echo htmlspecialchars($platform_meta[$platform]['icon']); ?>" alt="<?php echo htmlspecialchars($platform_meta[$platform]['label']); ?>" class="platform-icon">
-                                                <span class="platform-text">
-                                                    <span class="platform-name"><?php echo htmlspecialchars($platform_meta[$platform]['label']); ?></span>
-                                                    <span class="platform-account"><?php echo htmlspecialchars($account_name); ?></span>
-                                                </span>
-                                                <span class="platform-check">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                                                        <path d="M20 6 9 17l-5-5"/>
+                                    <!-- Added id='mediaInput' here -->
+                                    <input type="file" id="mediaInput" name="media[]" accept="image/*,video/*" multiple required class="file-input-hidden">
+
+                                    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Select media files">
+                                        <div class="dropzone-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M12 16V4"/>
+                                                <path d="M7 9l5-5 5 5"/>
+                                                <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+                                            </svg>
+                                        </div>
+                                        <p class="dropzone-title">Click to upload or drag and drop</p>
+                                        <p class="dropzone-hint">Images or videos, multiple files supported</p>
+                                    </div>
+
+                                    <div class="media-preview-grid" id="mediaPreviewGrid"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="compose-side">
+                            <div class="form-card">
+                                <div class="form-group">
+                                    <label>Post to</label>
+                                    <div class="platform-checkboxes">
+                                        <?php foreach ($connected as $platform => $account_name): ?>
+                                            <?php if (isset($platform_meta[$platform])): ?>
+                                                <label class="platform-checkbox">
+                                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
+                                                    <span class="platform-checkbox-inner">
+                                                        <img src="<?php echo htmlspecialchars($platform_meta[$platform]['icon']); ?>" alt="<?php echo htmlspecialchars($platform_meta[$platform]['label']); ?>" class="platform-icon">
+                                                        <span class="platform-text">
+                                                            <span class="platform-name"><?php echo htmlspecialchars($platform_meta[$platform]['label']); ?></span>
+                                                            <span class="platform-account"><?php echo htmlspecialchars($account_name); ?></span>
+                                                        </span>
+                                                        <span class="platform-check">
+                                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M20 6 9 17l-5-5"/>
+                                                            </svg>
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-card">
+                                <div class="form-group">
+                                    <label>When to publish</label>
+
+                                    <div class="timing-toggle">
+                                        <button type="button" class="timing-btn active" id="timingNowBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M13 2 3 14h7l-1 8 10-12h-7z"/>
+                                            </svg>
+                                            Post now
+                                        </button>
+                                        <button type="button" class="timing-btn" id="timingLaterBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="9"/>
+                                                <path d="M12 7v5l3 3"/>
+                                            </svg>
+                                            Schedule for later
+                                        </button>
+                                    </div>
+
+                                    <div class="scheduler-panel" id="schedulerPanel" hidden>
+                                        <div class="calendar" id="calendar">
+                                            <div class="calendar-header">
+                                                <button type="button" id="prevMonth" class="cal-nav" aria-label="Previous month">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M15 18l-6-6 6-6"/>
                                                     </svg>
-                                                </span>
-                                            </span>
-                                        </label>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </div>
+                                                </button>
+                                                <span id="calendarMonthLabel" class="cal-month-label"></span>
+                                                <button type="button" id="nextMonth" class="cal-nav" aria-label="Next month">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M9 18l6-6-6-6"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div class="cal-weekdays">
+                                                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                                            </div>
+                                            <div class="cal-days" id="calendarDays"></div>
+                                        </div>
 
-                    <div class="form-card">
-                        <div class="form-group">
-                            <label>Schedule for later (optional)</label>
+                                        <div class="scheduler-time">
+                                            <label for="scheduleTime">Time</label>
+                                            <input type="time" id="scheduleTime">
+                                        </div>
 
-                            <div class="scheduler">
-                                <div class="calendar" id="calendar">
-                                    <div class="calendar-header">
-                                        <button type="button" id="prevMonth" class="cal-nav" aria-label="Previous month">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M15 18l-6-6 6-6"/>
-                                            </svg>
-                                        </button>
-                                        <span id="calendarMonthLabel" class="cal-month-label"></span>
-                                        <button type="button" id="nextMonth" class="cal-nav" aria-label="Next month">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M9 18l6-6-6-6"/>
-                                            </svg>
-                                        </button>
+                                        <div class="scheduler-summary" id="scheduledSummary">Pick a date and time above</div>
                                     </div>
-                                    <div class="cal-weekdays">
-                                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                                    </div>
-                                    <div class="cal-days" id="calendarDays"></div>
-                                </div>
 
-                                <div class="scheduler-time">
-                                    <label for="scheduleTime">Time</label>
-                                    <input type="time" id="scheduleTime">
-                                    <div class="scheduler-summary" id="scheduledSummary">No date selected — post publishes immediately</div>
-                                    <button type="button" id="clearSchedule" class="btn-clear-schedule">Clear schedule</button>
+                                    <input type="hidden" id="scheduled_at" name="scheduled_at" value="<?php echo htmlspecialchars($_POST['scheduled_at'] ?? ''); ?>">
                                 </div>
                             </div>
 
-                            <input type="hidden" id="scheduled_at" name="scheduled_at" value="<?php echo htmlspecialchars($_POST['scheduled_at'] ?? ''); ?>">
+                            <button type="submit" class="btn-primary">Save &amp; Publish</button>
                         </div>
-                    </div>
 
-                    <button type="submit" class="btn-primary">Save &amp; Publish</button>
+                    </div>
                 </form>
             <?php endif; ?>
 
@@ -498,8 +522,10 @@ $platform_meta = [
         const nextBtn = document.getElementById('nextMonth');
         const timeInput = document.getElementById('scheduleTime');
         const summary = document.getElementById('scheduledSummary');
-        const clearBtn = document.getElementById('clearSchedule');
         const hiddenField = document.getElementById('scheduled_at');
+        const timingNowBtn = document.getElementById('timingNowBtn');
+        const timingLaterBtn = document.getElementById('timingLaterBtn');
+        const schedulerPanel = document.getElementById('schedulerPanel');
         if (!calendarDays) return;
 
         const today = new Date();
@@ -513,8 +539,21 @@ $platform_meta = [
 
         function pad(n) { return n.toString().padStart(2, '0'); }
 
+        function nowTimeStr() {
+            const n = new Date();
+            return pad(n.getHours()) + ':' + pad(n.getMinutes());
+        }
+
         function sameDay(a, b) {
             return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+        }
+
+        function applyTimeMinConstraint() {
+            if (selectedDate && sameDay(selectedDate, today)) {
+                timeInput.min = nowTimeStr();
+            } else {
+                timeInput.removeAttribute('min');
+            }
         }
 
         function renderCalendar() {
@@ -549,6 +588,7 @@ $platform_meta = [
                 } else {
                     btn.addEventListener('click', () => {
                         selectedDate = cellDate;
+                        applyTimeMinConstraint();
                         renderCalendar();
                         updateScheduleValue();
                     });
@@ -563,6 +603,15 @@ $platform_meta = [
 
         function updateScheduleValue() {
             if (selectedDate && timeInput.value) {
+                if (sameDay(selectedDate, today) && timeInput.value < nowTimeStr()) {
+                    hiddenField.value = '';
+                    timeInput.value = '';
+                    summary.textContent = "That time has already passed today — pick a later time";
+                    summary.classList.remove('scheduler-summary-active');
+                    summary.classList.add('scheduler-summary-warning');
+                    return;
+                }
+                summary.classList.remove('scheduler-summary-warning');
                 const value = selectedDate.getFullYear() + '-' + pad(selectedDate.getMonth() + 1) + '-' + pad(selectedDate.getDate()) + 'T' + timeInput.value;
                 hiddenField.value = value;
                 const niceDate = selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -571,11 +620,30 @@ $platform_meta = [
             } else if (selectedDate && !timeInput.value) {
                 hiddenField.value = '';
                 summary.textContent = 'Pick a time to finish scheduling';
-                summary.classList.remove('scheduler-summary-active');
+                summary.classList.remove('scheduler-summary-active', 'scheduler-summary-warning');
             } else {
                 hiddenField.value = '';
-                summary.textContent = 'No date selected — post publishes immediately';
-                summary.classList.remove('scheduler-summary-active');
+                summary.textContent = 'Pick a date and time above';
+                summary.classList.remove('scheduler-summary-active', 'scheduler-summary-warning');
+            }
+        }
+
+        function setTimingMode(mode) {
+            if (mode === 'later') {
+                timingLaterBtn.classList.add('active');
+                timingNowBtn.classList.remove('active');
+                schedulerPanel.hidden = false;
+            } else {
+                timingNowBtn.classList.add('active');
+                timingLaterBtn.classList.remove('active');
+                schedulerPanel.hidden = true;
+                selectedDate = null;
+                timeInput.value = '';
+                timeInput.removeAttribute('min');
+                hiddenField.value = '';
+                renderCalendar();
+                summary.textContent = 'Pick a date and time above';
+                summary.classList.remove('scheduler-summary-active', 'scheduler-summary-warning');
             }
         }
 
@@ -590,14 +658,30 @@ $platform_meta = [
             renderCalendar();
         });
         timeInput.addEventListener('change', updateScheduleValue);
-        clearBtn.addEventListener('click', () => {
-            selectedDate = null;
-            timeInput.value = '';
-            renderCalendar();
-            updateScheduleValue();
-        });
+        timingNowBtn.addEventListener('click', () => setTimingMode('now'));
+        timingLaterBtn.addEventListener('click', () => setTimingMode('later'));
 
         renderCalendar();
+
+        // If the form re-rendered after a validation error and a schedule was
+        // already set, restore it instead of dropping back to "Post now".
+        if (hiddenField.value) {
+            const parts = hiddenField.value.split('T');
+            const dateParts = (parts[0] || '').split('-').map(Number);
+            if (dateParts.length === 3 && !isNaN(dateParts[0])) {
+                const restored = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+                if (restored >= today) {
+                    selectedDate = restored;
+                    viewYear = restored.getFullYear();
+                    viewMonth = restored.getMonth();
+                    timeInput.value = parts[1] || '';
+                    applyTimeMinConstraint();
+                    renderCalendar();
+                    setTimingMode('later');
+                    updateScheduleValue();
+                }
+            }
+        }
     })();
     </script>
 

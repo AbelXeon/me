@@ -264,6 +264,26 @@ button { font-family: inherit; }
     text-decoration: underline;
 }
 
+/* ---------- Compose layout (two columns) ---------- */
+
+.compose-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 20px;
+}
+
+.compose-main,
+.compose-side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.compose-side .btn-primary {
+    margin-top: 4px;
+}
+
 /* ---------- Form cards ---------- */
 
 .form-card {
@@ -519,18 +539,67 @@ button { font-family: inherit; }
     outline-offset: 2px;
 }
 
+/* ---------- When to publish (now / later toggle) ---------- */
+
+.timing-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+
+.timing-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--slate);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.timing-btn svg { width: 14px; height: 14px; stroke: currentColor; }
+
+.timing-btn.active {
+    background: var(--surface);
+    color: var(--accent);
+    box-shadow: var(--shadow-card);
+}
+
+.scheduler-panel {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.scheduler-panel[hidden] {
+    display: none;
+}
+
 /* ---------- Scheduler / calendar ---------- */
 
 .scheduler {
-    display: grid;
-    grid-template-columns: 1fr 220px;
-    gap: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .calendar {
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    padding: 16px;
+    padding: 12px;
     background: var(--bg);
 }
 
@@ -538,19 +607,19 @@ button { font-family: inherit; }
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .cal-month-label {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     font-family: 'Space Grotesk', sans-serif;
 }
 
 .cal-nav {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
     border: 1px solid var(--line);
     background: var(--surface);
     display: flex;
@@ -560,7 +629,7 @@ button { font-family: inherit; }
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.cal-nav svg { width: 14px; height: 14px; stroke: var(--ink-soft); }
+.cal-nav svg { width: 12px; height: 12px; stroke: var(--ink-soft); }
 
 .cal-nav:hover { border-color: var(--accent); background: var(--accent-soft); }
 
@@ -568,27 +637,28 @@ button { font-family: inherit; }
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--slate);
-    margin-bottom: 6px;
+    margin-bottom: 5px;
 }
 
 .cal-days {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    gap: 3px;
 }
 
 .cal-day {
     aspect-ratio: 1 / 1;
+    max-height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 7px;
     border: none;
     background: transparent;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--ink-soft);
     cursor: pointer;
@@ -660,6 +730,13 @@ button { font-family: inherit; }
 .scheduler-summary-active {
     color: var(--accent);
     background: var(--accent-soft);
+    border-color: transparent;
+    font-weight: 600;
+}
+
+.scheduler-summary-warning {
+    color: var(--danger);
+    background: var(--danger-soft);
     border-color: transparent;
     font-weight: 600;
 }
@@ -780,7 +857,7 @@ button { font-family: inherit; }
 
     .topbar { align-items: flex-start; }
 
-    .scheduler {
+    .compose-grid {
         grid-template-columns: 1fr;
     }
 }

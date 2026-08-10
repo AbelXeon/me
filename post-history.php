@@ -7,10 +7,8 @@ requireLogin();
 $user_id = getCurrentUserId();
 $conn = getDBConnection();
 
-// Get optional filter from query string
 $status_filter = $_GET['status'] ?? 'all';
 
-// Handle Post Deletion
 $action_msg = '';
 $action_error = '';
 
@@ -19,8 +17,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $action_error = 'Invalid submission.';
     } else {
         $delete_post_id = intval($_POST['post_id'] ?? 0);
-        
-        // Verify post belongs to this user
         $stmt = $conn->prepare("SELECT p.id, m.path FROM posts p JOIN media_files m ON p.media_id = m.id WHERE p.id = ? AND p.user_id = ?");
         $stmt->execute([$delete_post_id, $user_id]);
         $post_to_delete = $stmt->fetch();
@@ -28,11 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if ($post_to_delete) {
             try {
                 $conn->beginTransaction();
-
-                // Delete post record (cascade deletes post_platforms)
                 $stmtDel = $conn->prepare("DELETE FROM posts WHERE id = ?");
                 $stmtDel->execute([$delete_post_id]);
-
                 $conn->commit();
                 $action_msg = "Post deleted successfully.";
             } catch (Exception $e) {
@@ -45,12 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-// CSRF token generation
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Build query depending on status filter
 $sql = "
     SELECT 
         p.id, 
@@ -67,30 +58,24 @@ $sql = "
     JOIN media_files m ON p.media_id = m.id 
     WHERE p.user_id = ?
 ";
-
 $params = [$user_id];
-
 if (in_array($status_filter, ['posted', 'scheduled', 'draft', 'failed'])) {
     $sql .= " AND p.status = ?";
     $params[] = $status_filter;
 }
-
 $sql .= " ORDER BY p.created_at DESC";
-
 $stmt = $conn->prepare($sql);
 $stmt->execute($params);
 $posts = $stmt->fetchAll();
 
-// Get platform metadata
 $platform_meta = [
-    'facebook'  => ['icon' => '📘', 'label' => 'Facebook'],
-    'telegram'  => ['icon' => '✈️', 'label' => 'Telegram'],
-    'linkedin'  => ['icon' => '💼', 'label' => 'LinkedIn'],
-    'tiktok'    => ['icon' => '🎵', 'label' => 'TikTok'],
-    'instagram' => ['icon' => '📷', 'label' => 'Instagram'],
+    'facebook'  => ['icon' => 'https://cdn.simpleicons.org/facebook/1877F2', 'label' => 'Facebook'],
+    'instagram' => ['icon' => 'https://cdn.simpleicons.org/instagram/E4405F', 'label' => 'Instagram'],
+    'telegram'  => ['icon' => 'https://cdn.simpleicons.org/telegram/26A5E4', 'label' => 'Telegram'],
+    'linkedin'  => ['icon' => 'https://cdn.simpleicons.org/linkedin/0A66C2', 'label' => 'LinkedIn'],
+    'tiktok'    => ['icon' => 'https://cdn.simpleicons.org/tiktok/000000', 'label' => 'TikTok'],
 ];
 
-// Helper to fetch platforms for each post
 function getPostPlatforms($conn, $post_id) {
     $stmt = $conn->prepare("SELECT platform, platform_post_id, status, error_message, posted_at FROM post_platforms WHERE post_id = ?");
     $stmt->execute([$post_id]);
@@ -99,183 +84,302 @@ function getPostPlatforms($conn, $post_id) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Post History - Social Media Manager</title>
-    <link rel="stylesheet" href="assets/css/post-history.css">
+    <link rel="stylesheet" href="assets/css/create-post.css"> <!-- Reusing your existing CSS variables -->
     <style>
-        /* Fallback Styles if post-history.css does not exist */
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: #f4f6f9; color: #333; padding-bottom: 40px; }
-        .header { background: #ffffff; border-bottom: 1px solid #e0e0e0; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
-        .header-left { display: flex; align-items: center; gap: 20px; }
-        .header h1 { font-size: 20px; color: #111; }
-        .back-btn { text-decoration: none; color: #0066cc; font-size: 14px; font-weight: 500; }
-        .user-info { display: flex; align-items: center; gap: 15px; font-size: 14px; }
-        .btn-logout { background: #ff4d4d; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; }
-        .container { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
-        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
-        .alert-success { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
-        .alert-error { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
-        
-        .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .filter-btn { padding: 8px 16px; border-radius: 20px; text-decoration: none; background: #e4e6eb; color: #4b4f56; font-size: 13px; font-weight: 600; }
-        .filter-btn.active { background: #0066cc; color: #ffffff; }
+        /* Specific enhancements for Post History */
+        .filter-nav {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+        .filter-link {
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--slate);
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .filter-link:hover { border-color: var(--accent); color: var(--accent); }
+        .filter-link.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
 
-        .post-card { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 20px; padding: 20px; display: flex; gap: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .media-preview { width: 140px; height: 140px; border-radius: 6px; overflow: hidden; background: #000; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .media-preview img, .media-preview video { width: 100%; height: 100%; object-fit: cover; }
-        .post-content { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
-        .post-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-        .post-title { font-weight: 700; font-size: 16px; color: #111; margin-bottom: 4px; }
-        .post-caption { font-size: 14px; color: #444; line-height: 1.4; white-space: pre-wrap; margin-bottom: 12px; }
-        
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-        .badge-posted { background: #e6f4ea; color: #137333; }
-        .badge-scheduled { background: #feefe3; color: #b06000; }
-        .badge-draft { background: #f1f3f4; color: #5f6368; }
-        .badge-failed { background: #fce8e6; color: #c5221f; }
+        .post-card-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .history-card {
+            display: flex;
+            gap: 24px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.2s ease;
+        }
+        .history-media {
+            width: 180px;
+            height: 180px;
+            flex-shrink: 0;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: var(--ink);
+            position: relative;
+        }
+        .history-media img, .history-media video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .history-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .status-badge {
+            display: inline-flex;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+        }
+        .status-posted { background: var(--success-soft); color: var(--success); }
+        .status-scheduled { background: var(--warning-soft); color: var(--warning); }
+        .status-failed { background: var(--danger-soft); color: var(--danger); }
+        .status-draft { background: var(--bg); color: var(--slate); }
 
-        .post-meta { font-size: 12px; color: #777; margin-bottom: 12px; display: flex; gap: 15px; flex-wrap: wrap; }
-        .platform-list { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-        .platform-chip { font-size: 12px; padding: 4px 10px; border-radius: 15px; border: 1px solid #ddd; background: #fafafa; display: flex; align-items: center; gap: 6px; }
-        .platform-chip.chip-posted { border-color: #ceead6; background: #f6fbf7; }
-        .platform-chip.chip-failed { border-color: #fad2cf; background: #fff8f8; }
-        
-        .post-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
-        .btn-delete { background: none; border: none; color: #dc3545; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }
-        .btn-delete:hover { color: #a71d2a; }
-        
-        .empty-state { text-align: center; padding: 50px 20px; background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; }
-        .empty-state h3 { font-size: 18px; color: #333; margin-bottom: 8px; }
-        .empty-state p { font-size: 14px; color: #666; margin-bottom: 15px; }
-        .btn-create { display: inline-block; background: #0066cc; color: #fff; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; }
-        
-        .error-tooltip { color: #c5221f; font-size: 11px; margin-top: 4px; display: block; }
+        .history-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .history-caption {
+            font-size: 14px;
+            color: var(--ink-soft);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .platform-mini-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--line);
+        }
+        .platform-status-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--ink-soft);
+        }
+        .platform-status-chip img {
+            width: 16px;
+            height: 16px;
+        }
+        .platform-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--line);
+        }
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            color: var(--slate);
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 650px) {
+            .history-card { flex-direction: column; }
+            .history-media { width: 100%; height: 200px; }
+        }
     </style>
 </head>
-
 <body>
-    <div class="header">
-        <div class="header-left">
-            <h1>📊 Post History</h1>
-            <a href="dashboard.php" class="back-btn">← Back to Dashboard</a>
-        </div>
-        <div class="user-info">
-            <span>👤 <?php echo htmlspecialchars(getCurrentUsername()); ?></span>
-            <a href="logout.php" class="btn-logout">Logout</a>
-        </div>
-    </div>
+    <div class="app-shell">
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
-    <div class="container">
-        <?php if ($action_msg): ?>
-            <div class="alert alert-success"><?php echo htmlspecialchars($action_msg); ?></div>
-        <?php endif; ?>
-
-        <?php if ($action_error): ?>
-            <div class="alert alert-error"><?php echo htmlspecialchars($action_error); ?></div>
-        <?php endif; ?>
-
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <a href="post-history.php?status=all" class="filter-btn <?php echo $status_filter === 'all' ? 'active' : ''; ?>">All Posts</a>
-            <a href="post-history.php?status=posted" class="filter-btn <?php echo $status_filter === 'posted' ? 'active' : ''; ?>">Posted</a>
-            <a href="post-history.php?status=scheduled" class="filter-btn <?php echo $status_filter === 'scheduled' ? 'active' : ''; ?>">Scheduled</a>
-            <a href="post-history.php?status=draft" class="filter-btn <?php echo $status_filter === 'draft' ? 'active' : ''; ?>">Drafts</a>
-            <a href="post-history.php?status=failed" class="filter-btn <?php echo $status_filter === 'failed' ? 'active' : ''; ?>">Failed</a>
-        </div>
-
-        <?php if (empty($posts)): ?>
-            <div class="empty-state">
-                <h3>No posts found</h3>
-                <p>You haven't created any posts matching this status yet.</p>
-                <a href="create-post.php" class="btn-create">✍️ Create a New Post</a>
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-mark">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6a6 6 0 1 0 6 6"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                    </svg>
+                </div>
+                <span>Social Manager</span>
+                <button type="button" class="sidebar-close" onclick="closeSidebar()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
             </div>
-        <?php else: ?>
-            <?php foreach ($posts as $post): ?>
-                <?php 
-                    $post_platforms = getPostPlatforms($conn, $post['id']); 
-                    $status = $post['status'];
-                    $status_class = match ($status) {
-                        'posted' => 'badge-posted',
-                        'scheduled' => 'badge-scheduled',
-                        'failed' => 'badge-failed',
-                        default => 'badge-draft'
-                    };
-                ?>
-                <div class="post-card">
-                    <div class="media-preview">
-                        <?php if ($post['media_type'] === 'video'): ?>
-                            <video src="<?php echo htmlspecialchars($post['media_path']); ?>" controls></video>
-                        <?php else: ?>
-                            <img src="<?php echo htmlspecialchars($post['media_path']); ?>" alt="Post Media">
-                        <?php endif; ?>
-                    </div>
+            <div class="sidebar-section-label">Menu</div>
+            <ul class="nav-list">
+                <li><a href="dashboard.php" class="nav-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+                    Dashboard</a></li>
+                <li><a href="create-post.php" class="nav-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    Create Post</a></li>
+                <li><a href="post-history.php" class="nav-item active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12.5" y="8" width="3" height="10" rx="0.5"/><rect x="18" y="5" width="3" height="13" rx="0.5"/></svg>
+                    Post History</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <a href="logout.php" class="btn-logout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+                    Logout</a>
+            </div>
+        </aside>
 
-                    <div class="post-content">
-                        <div>
-                            <div class="post-header">
-                                <div class="post-title">
-                                    <?php echo htmlspecialchars($post['title'] ?: 'Untitled Post'); ?>
-                                </div>
-                                <span class="badge <?php echo $status_class; ?>">
-                                    <?php echo htmlspecialchars(ucfirst($status)); ?>
-                                </span>
-                            </div>
-
-                            <div class="post-caption">
-                                <?php echo htmlspecialchars($post['caption']); ?>
-                            </div>
-
-                            <div class="post-meta">
-                                <span>📅 Created: <?php echo date('M d, Y H:i', strtotime($post['created_at'])); ?></span>
-                                <?php if ($post['scheduled_at']): ?>
-                                    <span>⏰ Scheduled for: <?php echo date('M d, Y H:i', strtotime($post['scheduled_at'])); ?></span>
-                                <?php endif; ?>
-                                <?php if ($post['published_at']): ?>
-                                    <span>🚀 Published: <?php echo date('M d, Y H:i', strtotime($post['published_at'])); ?></span>
-                                <?php endif; ?>
-                            </div>
-
-                            <div class="platform-list">
-                                <strong style="font-size: 12px; color: #555;">Target Platforms:</strong>
-                                <?php foreach ($post_platforms as $pp): ?>
-                                    <?php 
-                                        $p_code = $pp['platform'];
-                                        $p_icon = $platform_meta[$p_code]['icon'] ?? '🔗';
-                                        $p_label = $platform_meta[$p_code]['label'] ?? ucfirst($p_code);
-                                        $p_status = $pp['status'];
-                                        $chip_class = ($p_status === 'posted') ? 'chip-posted' : (($p_status === 'failed') ? 'chip-failed' : '');
-                                    ?>
-                                    <div>
-                                        <span class="platform-chip <?php echo $chip_class; ?>">
-                                            <span><?php echo $p_icon; ?></span>
-                                            <span><?php echo htmlspecialchars($p_label); ?></span>
-                                            <span style="font-size: 10px; opacity: 0.8;">(<?php echo ucfirst($p_status); ?>)</span>
-                                        </span>
-                                        <?php if ($p_status === 'failed' && !empty($pp['error_message'])): ?>
-                                            <span class="error-tooltip">❌ <?php echo htmlspecialchars($pp['error_message']); ?></span>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="post-actions">
-                            <form method="POST" action="" onsubmit="return confirm('Are you sure you want to delete this post record?');">
-                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
-                                <button type="submit" class="btn-delete">Delete</button>
-                            </form>
-                        </div>
+        <!-- MAIN CONTENT -->
+        <main class="main">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <button type="button" class="hamburger-btn" onclick="openSidebar()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>
+                    </button>
+                    <div>
+                        <h1>Post History</h1>
+                        <span class="back-btn">Review your social activity</span>
                     </div>
                 </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
-</body>
+                <div class="user-info">
+                    <span class="welcome">Welcome, <strong><?php echo htmlspecialchars(getCurrentUsername()); ?></strong></span>
+                </div>
+            </div>
 
+            <?php if ($action_msg): ?>
+                <div class="alert alert-success"><?php echo htmlspecialchars($action_msg); ?></div>
+            <?php endif; ?>
+            <?php if ($action_error): ?>
+                <div class="alert alert-error"><?php echo htmlspecialchars($action_error); ?></div>
+            <?php endif; ?>
+
+            <div class="filter-nav">
+                <a href="?status=all" class="filter-link <?php echo $status_filter === 'all' ? 'active' : ''; ?>">All Posts</a>
+                <a href="?status=posted" class="filter-link <?php echo $status_filter === 'posted' ? 'active' : ''; ?>">Published</a>
+                <a href="?status=scheduled" class="filter-link <?php echo $status_filter === 'scheduled' ? 'active' : ''; ?>">Scheduled</a>
+                <a href="?status=draft" class="filter-link <?php echo $status_filter === 'draft' ? 'active' : ''; ?>">Drafts</a>
+                <a href="?status=failed" class="filter-link <?php echo $status_filter === 'failed' ? 'active' : ''; ?>">Failed</a>
+            </div>
+
+            <?php if (empty($posts)): ?>
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <h3>No posts found</h3>
+                    <p>Try changing your filter or create something new.</p>
+                    <br>
+                    <a href="create-post.php" class="btn-primary" style="padding: 10px 24px; text-decoration:none;">Create New Post</a>
+                </div>
+            <?php else: ?>
+                <div class="post-card-grid">
+                    <?php foreach ($posts as $post): ?>
+                        <?php 
+                            $post_platforms = getPostPlatforms($conn, $post['id']); 
+                            $status = $post['status'];
+                        ?>
+                        <div class="history-card">
+                            <div class="history-media">
+                                <?php if ($post['media_type'] === 'video'): ?>
+                                    <video src="<?php echo htmlspecialchars($post['media_path']); ?>"></video>
+                                    <span class="media-preview-badge">Video</span>
+                                <?php else: ?>
+                                    <img src="<?php echo htmlspecialchars($post['media_path']); ?>" alt="Media">
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="history-content">
+                                <div class="status-badge status-<?php echo $status; ?>">
+                                    <?php echo htmlspecialchars($status); ?>
+                                </div>
+                                
+                                <div class="history-title"><?php echo htmlspecialchars($post['title'] ?: 'Untitled Post'); ?></div>
+                                <div class="history-caption"><?php echo htmlspecialchars($post['caption']); ?></div>
+                                
+                                <div class="post-meta" style="margin-bottom:0;">
+                                    <span style="display:flex; align-items:center; gap:4px;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                        <?php echo date('M d, Y', strtotime($post['created_at'])); ?>
+                                    </span>
+                                </div>
+
+                                <div class="platform-mini-list">
+                                    <?php foreach ($post_platforms as $pp): ?>
+                                        <?php 
+                                            $p_code = $pp['platform'];
+                                            $p_icon = $platform_meta[$p_code]['icon'] ?? '';
+                                            $p_status = $pp['status'];
+                                            $dot_color = ($p_status === 'posted') ? 'var(--success)' : (($p_status === 'failed') ? 'var(--danger)' : 'var(--slate)');
+                                        ?>
+                                        <div class="platform-status-chip">
+                                            <img src="<?php echo $p_icon; ?>" alt="">
+                                            <span class="platform-status-dot" style="background:<?php echo $dot_color; ?>"></span>
+                                            <?php if($p_status === 'failed'): ?>
+                                                <span style="color:var(--danger); font-size:10px;">Error</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+
+                                    <div style="margin-left: auto;">
+                                        <form method="POST" action="" onsubmit="return confirm('Delete this post record?');">
+                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
+                                            <button type="submit" class="btn-clear-schedule">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </main>
+    </div>
+
+    <script>
+        function openSidebar() {
+            document.getElementById('sidebar').classList.add('open');
+            document.getElementById('sidebarOverlay').classList.add('open');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('open');
+        }
+    </script>
+</body>
 </html>
