@@ -647,10 +647,9 @@ class SocialMediaManager {
         $uploadedAssets = [];
         $isVideoPost = false;
         $hasVideoItem = false;
-        $videoDebugReason = null; // captures WHY video processing stopped, for real debugging
+        $videoDebugReason = null; 
 
-        // LinkedIn API version used for the versioned /rest/ endpoints (video upload).
-        // Bump roughly yearly -- LinkedIn supports each version for about 12 months.
+   
         $linkedinVersion = '202606';
 
         // 1. Process all media attachments
@@ -664,7 +663,7 @@ class SocialMediaManager {
 
             try {
                 if ($isImage) {
-                    // --- IMAGE UPLOAD (unchanged, already working) ---
+                
                     $ch = curl_init("https://api.linkedin.com/v2/images?action=initializeUpload");
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_POST, 1);
@@ -689,11 +688,7 @@ class SocialMediaManager {
                         $uploadedAssets[] = $assetUrn;
                     }
                 } else {
-                    // --- VIDEO UPLOAD (fixed) ---
-                    // Videos MUST go through the versioned /rest/videos endpoint --
-                    // /v2/videos does not exist, which is why this silently failed before.
-                    // Videos also use chunked/multipart upload + a required finalize step,
-                    // unlike the single-shot image upload above.
+
                     $hasVideoItem = true;
                     $chInit = curl_init("https://api.linkedin.com/rest/videos?action=initializeUpload");
                     curl_setopt($chInit, CURLOPT_RETURNTRANSFER, true);
@@ -722,14 +717,12 @@ class SocialMediaManager {
                     $uploadToken = $initResult['value']['uploadToken'] ?? '';
 
                     if (empty($uploadInstructions) || !$videoUrn) {
-                        // Initialization failed -- capture LinkedIn's actual response so
-                        // we know why (bad scope, app not approved, invalid owner urn, etc.)
+
                         $apiError = $initResult['message'] ?? json_encode($initResult);
                         $videoDebugReason = "Video init failed (HTTP {$initHttpCode}): " . $apiError;
                         continue;
                     }
 
-                    // Upload each chunk and collect its ETag (required for finalize)
                     $uploadedPartIds = [];
                     $uploadOk = true;
 
@@ -751,10 +744,6 @@ class SocialMediaManager {
                         curl_setopt($chPut, CURLOPT_CUSTOMREQUEST, "PUT");
                         curl_setopt($chPut, CURLOPT_RETURNTRANSFER, true);
                         curl_setopt($chPut, CURLOPT_POSTFIELDS, $chunkData);
-                        // NOTE: without an explicit Content-Type, curl defaults PUT bodies to
-                        // application/x-www-form-urlencoded, which LinkedIn's pre-signed upload
-                        // URL will often reject with a 400. Set it explicitly like the (working)
-                        // image upload above does.
                         curl_setopt($chPut, CURLOPT_HTTPHEADER, [
                             "Content-Type: video/mp4",
                             "Content-Length: " . strlen($chunkData)
@@ -772,15 +761,12 @@ class SocialMediaManager {
 
                         if ($putHttpCode < 200 || $putHttpCode >= 300) {
                             $uploadOk = false;
-                            // Include LinkedIn's actual response body so we know the real
-                            // reason (signature mismatch, size mismatch, expired URL, etc.)
-                            // instead of just the bare status code.
+                       
                             $bodySnippet = $putResponseBody ? substr($putResponseBody, 0, 300) : '(empty response body)';
                             $videoDebugReason = "Video chunk PUT failed with HTTP {$putHttpCode}: {$bodySnippet}";
                             break;
                         }
 
-                        // ETag is required to finalize the upload
                         $etag = $responseHeaders['etag'] ?? null;
                         if ($etag) {
                             $uploadedPartIds[] = trim($etag, '"');
@@ -788,10 +774,9 @@ class SocialMediaManager {
                     }
 
                     if (!$uploadOk) {
-                        continue; // skip this media item, falls through to fallback below
+                        continue; 
                     }
 
-                    // Finalize the video upload
                     $chFinalize = curl_init("https://api.linkedin.com/rest/videos?action=finalizeUpload");
                     curl_setopt($chFinalize, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($chFinalize, CURLOPT_POST, 1);
@@ -817,7 +802,6 @@ class SocialMediaManager {
                         continue;
                     }
 
-                    // Poll processing status until AVAILABLE before referencing it in a post
                     $isReady = false;
                     $retries = 20;
                     while ($retries > 0) {
@@ -856,12 +840,9 @@ class SocialMediaManager {
                 $videoDebugReason = "Exception during video processing: " . $e->getMessage();
                 continue;
             }
-            if ($isVideoPost) break; // LinkedIn supports only one video per post
+            if ($isVideoPost) break; 
         }
 
-        // If the post included a video but it never successfully attached, fail here
-        // with the real reason instead of silently publishing caption-only text and
-        // reporting "posted" as if the video worked.
         if ($hasVideoItem && !$isVideoPost) {
             $error_message = $videoDebugReason ?? "LinkedIn video upload failed for an unknown reason.";
             return false;
@@ -875,24 +856,40 @@ class SocialMediaManager {
             'lifecycleState' => 'PUBLISHED'
         ];
 
-        if (!empty($uploadedAssets)) {
-            if ($isVideoPost) {
-                $payload['content'] = ['media' => ['id' => $uploadedAssets[0]]];
-            } else {
-                $imagesArray = [];
-                foreach ($uploadedAssets as $urn) {
-                    $imagesArray[] = ['id' => $urn];
-                }
-                $payload['content'] = ['multiImage' => ['images' => $imagesArray]];
-            }
-        } else if (!empty($post['external_link'])) {
-            $payload['content'] = [
-                'article' => [
-                    'source' => $post['external_link'],
-                    'title' => $post['title'] ?: 'Shared Link'
-                ]
-            ];
+
+
+
+
+
+
+       if (!empty($uploadedAssets)) {
+    if ($isVideoPost) {
+        $payload['content'] = ['media' => ['id' => $uploadedAssets[0]]];
+    } elseif (count($uploadedAssets) === 1) {
+        // Single image post
+        $payload['content'] = [
+            'media' => [
+                'id' => $uploadedAssets[0]
+            ]
+        ];
+    } else {
+        // Multiple image post
+        $imagesArray = [];
+        foreach ($uploadedAssets as $urn) {
+            $imagesArray[] = ['id' => $urn];
         }
+
+        $payload['content'] = [
+            'multiImage' => [
+                'images' => $imagesArray
+            ]
+        ];
+    }
+}
+
+
+
+
 
         $ch = curl_init("https://api.linkedin.com/v2/posts");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
