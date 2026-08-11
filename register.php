@@ -110,97 +110,122 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Account - Social Manager</title>
+    <title>Create Account - LEYKUN Social Media Management</title>
     <link rel="stylesheet" href="assets/css/register.css">
-    <style>
-        .modal-overlay {
-            display: <?php echo $show_modal ? 'flex' : 'none'; ?>;
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            justify-content: center; align-items: center; z-index: 9999;
-        }
-        .modal-card {
-            background: white; padding: 40px; border-radius: 20px; text-align: center;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.5); width: 90%; max-width: 400px;
-        }
-        .code-input {
-            font-size: 32px; letter-spacing: 10px; text-align: center;
-            width: 100%; margin: 25px 0; border: 2px solid #007bff; border-radius: 10px;
-            padding: 10px; box-sizing: border-box;
-        }
-        .resend-btn {
-            background: none; border: none; color: #007bff; font-weight: bold;
-            cursor: pointer; margin-top: 15px; text-decoration: underline; font-size: 14px;
-        }
-        .resend-btn:disabled {
-            color: #aaa; cursor: not-allowed; text-decoration: none;
-        }
-        .resend-msg { font-size: 13px; margin-top: 8px; }
-    </style>
 </head>
 <body>
 
-    <div class="register-container">
-        <div class="register-header">
-            <h1>📱 Create Account</h1>
-            <p>Sign up to manage your social media</p>
+    <div class="register-shell">
+
+        <!-- ===================== LEFT: ONBOARDING PANEL ===================== -->
+        <div class="onboarding-panel">
+            <div class="onboarding-glow onboarding-glow-1"></div>
+            <div class="onboarding-glow onboarding-glow-2"></div>
+
+            <div class="onboarding-inner">
+                <div class="brand-block">
+                    <div class="brand-mark">L</div>
+                    <div>
+                        <div class="brand-name">LEYKUN</div>
+                        <div class="brand-tagline">Social Media Management</div>
+                    </div>
+                </div>
+
+                <div class="onboarding-heading">
+                    <h1>Get Started<br>with Us</h1>
+                    <p>Complete these steps to launch your first post.</p>
+                </div>
+
+                <div class="onboarding-steps">
+                    <div class="step-card active">
+                        <span class="step-num">1</span>
+                        <span class="step-label">Sign up your account</span>
+                    </div>
+                    <div class="step-card">
+                        <span class="step-num">2</span>
+                        <span class="step-label">Connect your platforms</span>
+                    </div>
+                    <div class="step-card">
+                        <span class="step-num">3</span>
+                        <span class="step-label">Create &amp; schedule posts</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <?php if ($error): ?>
-            <div class="error-message"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
+        <!-- ===================== RIGHT: SIGNUP FORM ===================== -->
+        <div class="register-panel">
+            <div class="register-panel-inner">
 
-        <?php if (!$rate_limited): ?>
-        <form method="POST" action="">
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-            <input type="hidden" name="register_step" value="1">
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" name="first_name" required value="<?php echo isset($_POST['first_name']) ? htmlspecialchars($_POST['first_name']) : ''; ?>">
+                <div class="register-heading">
+                    <h1>Sign Up Account</h1>
+                    <p>Enter your details below to create your account.</p>
                 </div>
-                <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" name="last_name" required value="<?php echo isset($_POST['last_name']) ? htmlspecialchars($_POST['last_name']) : ''; ?>">
+
+                <?php if ($error): ?>
+                    <div class="error-message"><?php echo htmlspecialchars($error); ?></div>
+                <?php endif; ?>
+
+                <?php if (!$rate_limited): ?>
+                <form method="POST" action="" class="register-form" id="registerForm">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
+                    <input type="hidden" name="register_step" value="1">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>First Name</label>
+                            <input type="text" name="first_name" placeholder="e.g. John" required value="<?php echo isset($_POST['first_name']) ? htmlspecialchars($_POST['first_name']) : ''; ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            <input type="text" name="last_name" placeholder="e.g. Francisco" required value="<?php echo isset($_POST['last_name']) ? htmlspecialchars($_POST['last_name']) : ''; ?>">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" name="username" placeholder="e.g. johnfrancisco" required value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Gmail Address</label>
+                        <input type="email" name="email" placeholder="e.g. johnfrans@gmail.com" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
+                        <small>Must end in @gmail.com</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                        <div class="strength-meter" id="strengthMeter" hidden>
+                            <div class="strength-bar"><span id="strengthFill"></span></div>
+                            <span class="strength-label" id="strengthLabel"></span>
+                        </div>
+                        <small>Must be at least 8 characters, with a letter and a number.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Confirm Password</label>
+                        <input type="password" id="confirmPassword" name="confirm_password" placeholder="Re-enter your password" required>
+                        <span class="match-indicator" id="matchIndicator"></span>
+                    </div>
+
+                    <button type="submit" class="btn-register">Sign Up</button>
+                </form>
+                <?php else: ?>
+                    <p class="error-message">Too many attempts. Locked.</p>
+                <?php endif; ?>
+
+                <div class="login-link">
+                    <p>Already have an account? <a href="login.php">Log in</a></p>
                 </div>
+
             </div>
-
-            <div class="form-group">
-                <label>Username</label>
-                <input type="text" name="username" required value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>">
-            </div>
-
-            <div class="form-group">
-                <label>Gmail Address</label>
-                <input type="email" name="email" placeholder="must end in @gmail.com" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>">
-            </div>
-
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" name="password" placeholder="8+ chars, letters + numbers" required>
-            </div>
-
-            <div class="form-group">
-                <label>Confirm Password</label>
-                <input type="password" name="confirm_password" required>
-            </div>
-
-            <button type="submit" class="btn-register">Create Account</button>
-        </form>
-        <?php else: ?>
-            <p class="error-message">Too many attempts. Locked.</p>
-        <?php endif; ?>
-
-        <div class="login-link">
-            <p>Already have an account? <a href="login.php">Log in</a></p>
         </div>
+
     </div>
 
     <!-- VERIFICATION MODAL -->
-    <div id="verifyModal" class="modal-overlay">
+    <div id="verifyModal" class="modal-overlay" style="display: <?php echo $show_modal ? 'flex' : 'none'; ?>;">
         <div class="modal-card">
             <h2>Check Your Email</h2>
             <p>We've sent a 6-digit code to your Gmail. Please enter it below to verify your account.</p>
@@ -208,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form method="POST">
                 <input type="hidden" name="verify_step" value="1">
                 <input type="text" name="verify_code" class="code-input" maxlength="6" placeholder="000000" required autofocus autocomplete="off">
-                <button type="submit" class="btn-register" style="width: 100%;">Verify & Complete</button>
+                <button type="submit" class="btn-register btn-register-full">Verify &amp; Complete</button>
             </form>
 
             <!-- RESEND CODE SECTION WITH TIMER -->
@@ -218,6 +243,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
+
+    <!-- ===== Password strength + confirm-match (client-side only; server still re-validates) ===== -->
+    <script>
+    (function() {
+        const passwordInput = document.getElementById('password');
+        const confirmInput = document.getElementById('confirmPassword');
+        const meter = document.getElementById('strengthMeter');
+        const fill = document.getElementById('strengthFill');
+        const label = document.getElementById('strengthLabel');
+        const matchIndicator = document.getElementById('matchIndicator');
+
+        function scorePassword(pwd) {
+            let score = 0;
+            if (pwd.length >= 8) score++;
+            if (pwd.length >= 12) score++;
+            if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++;
+            if (/[0-9]/.test(pwd)) score++;
+            if (/[^A-Za-z0-9]/.test(pwd)) score++;
+            return score;
+        }
+
+        function updateStrength() {
+            const pwd = passwordInput.value;
+            if (!pwd) {
+                meter.hidden = true;
+                return;
+            }
+            meter.hidden = false;
+
+            const score = scorePassword(pwd);
+            let level, colorClass;
+            if (score <= 1) {
+                level = 'Very weak';
+                colorClass = 'strength-weak';
+            } else if (score === 2) {
+                level = 'Weak';
+                colorClass = 'strength-weak';
+            } else if (score === 3) {
+                level = 'Medium';
+                colorClass = 'strength-medium';
+            } else {
+                level = 'Strong';
+                colorClass = 'strength-strong';
+            }
+
+            const pct = Math.min(100, (score / 5) * 100);
+            fill.style.width = pct + '%';
+            fill.className = colorClass;
+            label.textContent = level;
+            label.className = 'strength-label ' + colorClass;
+
+            updateMatch();
+        }
+
+        function updateMatch() {
+            if (!confirmInput.value) {
+                matchIndicator.textContent = '';
+                matchIndicator.className = 'match-indicator';
+                return;
+            }
+            if (confirmInput.value === passwordInput.value) {
+                matchIndicator.textContent = 'Passwords match';
+                matchIndicator.className = 'match-indicator match-ok';
+            } else {
+                matchIndicator.textContent = "Passwords don't match";
+                matchIndicator.className = 'match-indicator match-bad';
+            }
+        }
+
+        if (passwordInput && confirmInput) {
+            passwordInput.addEventListener('input', updateStrength);
+            confirmInput.addEventListener('input', updateMatch);
+        }
+    })();
+    </script>
 
     <script>
         let timer = 60;
