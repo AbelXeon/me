@@ -96,8 +96,8 @@ if ($has_more) {
 $platform_meta = [
     'facebook'  => ['icon' => 'https://cdn.simpleicons.org/facebook/1877F2', 'label' => 'Facebook'],
     'telegram'  => ['icon' => 'https://cdn.simpleicons.org/telegram/26A5E4', 'label' => 'Telegram'],
-    'linkedin'  => ['icon' => 'https://cdn.simpleicons.org/linkedin/0A66C2', 'label' => 'LinkedIn'],
-    'tiktok'    => ['icon' => 'https://cdn.simpleicons.org/tiktok/000000', 'label' => 'TikTok'],
+     'linkedin'  => ['icon' => 'https://img.icons8.com/color/48/linkedin.png', 'label' => 'LinkedIn'],
+      'tiktok'    => ['icon' => 'https://cdn.simpleicons.org/tiktok/000000', 'label' => 'TikTok'],
     'instagram' => ['icon' => 'https://cdn.simpleicons.org/instagram/E4405F', 'label' => 'Instagram'],
 ];
 

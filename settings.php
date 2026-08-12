@@ -191,8 +191,11 @@ require_once 'includes/layout_header.php';
                 <div class="platform-header">
                     <div class="platform-info">
                         <div class="platform-icon linkedin-icon">
-                            <img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="LinkedIn">
-                        </div>
+<img src="https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/linkedin.svg" 
+     alt="LinkedIn" 
+     width="24" 
+     height="24" 
+     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);">                        </div>
                         <div>
                             <div class="platform-name">LinkedIn</div>
                             <div class="platform-status <?php echo isset($accounts['linkedin']) ? 'status-connected' : 'status-disconnected'; ?>">
