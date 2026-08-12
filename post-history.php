@@ -247,127 +247,14 @@ if ($is_ajax) {
     }
     exit;
 }
+
+$pageTitle = 'Post History';
+$activeNav = 'post-history';
+$pageCss = 'assets/css/post-history.css';
+$topbarTitle = 'Post History';
+$showBackBtn = true;
+require_once 'includes/layout_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Post History - Social Media Manager</title>
-    <link rel="stylesheet" href="assets/css/post-history.css">
-</head>
-
-<body>
-
-    <div class="app-shell">
-
-        <!-- ===================== SIDEBAR OVERLAY (mobile) ===================== -->
-        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
-        <!-- ===================== SIDEBAR ===================== -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-brand">
-                <div class="brand-mark">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2a10 10 0 1 0 10 10"/>
-                        <path d="M12 6a6 6 0 1 0 6 6"/>
-                        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-                    </svg>
-                </div>
-                <span>Social Manager</span>
-                <button type="button" class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 6 6 18"/>
-                        <path d="M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="sidebar-section-label">Menu</div>
-            <ul class="nav-list">
-                <li>
-                    <a href="dashboard.php" class="nav-item">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="7" height="9" rx="1.5"/>
-                            <rect x="14" y="3" width="7" height="5" rx="1.5"/>
-                            <rect x="14" y="12" width="7" height="9" rx="1.5"/>
-                            <rect x="3" y="16" width="7" height="5" rx="1.5"/>
-                        </svg>
-                        Dashboard
-                    </a>
-                </li>
-                <li>
-                    <a href="create-post.php" class="nav-item">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20h9"/>
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                        </svg>
-                        Create Post
-                    </a>
-                </li>
-                <li>
-                    <a href="settings.php" class="nav-item">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-                        </svg>
-                        Platform Settings
-                    </a>
-                </li>
-                <li>
-                    <a href="post-history.php" class="nav-item active">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 3v18h18"/>
-                            <rect x="7" y="12" width="3" height="6" rx="0.5"/>
-                            <rect x="12.5" y="8" width="3" height="10" rx="0.5"/>
-                            <rect x="18" y="5" width="3" height="13" rx="0.5"/>
-                        </svg>
-                        Post History
-                    </a>
-                </li>
-            </ul>
-
-            <div class="sidebar-footer">
-                <a href="logout.php" class="btn-logout">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <path d="M16 17l5-5-5-5"/>
-                        <path d="M21 12H9"/>
-                    </svg>
-                    Logout
-                </a>
-            </div>
-        </aside>
-
-        <!-- ===================== MAIN CONTENT ===================== -->
-        <main class="main">
-
-            <div class="topbar">
-                <div class="topbar-left">
-                    <button type="button" class="hamburger-btn" onclick="openSidebar()" aria-label="Open menu">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 6h18"/>
-                            <path d="M3 12h18"/>
-                            <path d="M3 18h18"/>
-                        </svg>
-                    </button>
-                    <div>
-                        <h1>Post History</h1>
-                        <a href="dashboard.php" class="back-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M19 12H5"/>
-                                <path d="M12 19l-7-7 7-7"/>
-                            </svg>
-                            Back to Dashboard
-                        </a>
-                    </div>
-                </div>
-
-                <div class="user-info">
-                    <span class="welcome">Welcome, <strong><?php echo htmlspecialchars(getCurrentUsername()); ?></strong></span>
-                </div>
-            </div>
 
             <?php if ($action_msg): ?>
                 <div class="alert alert-success"><?php echo htmlspecialchars($action_msg); ?></div>
@@ -413,9 +300,6 @@ if ($is_ajax) {
                 <?php endif; ?>
             <?php endif; ?>
 
-        </main>
-    </div>
-
     <!-- ===================== LIGHTBOX ===================== -->
     <div class="lightbox-overlay" id="lightboxOverlay">
         <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Close">
@@ -430,18 +314,6 @@ if ($is_ajax) {
         </button>
         <div class="lightbox-dots" id="lightboxDots"></div>
     </div>
-
-    <!-- ===== Sidebar toggle (mobile) ===== -->
-    <script>
-        function openSidebar() {
-            document.getElementById('sidebar').classList.add('open');
-            document.getElementById('sidebarOverlay').classList.add('open');
-        }
-        function closeSidebar() {
-            document.getElementById('sidebar').classList.remove('open');
-            document.getElementById('sidebarOverlay').classList.remove('open');
-        }
-    </script>
 
     <!-- ===== Lightbox gallery ===== -->
     <script>
@@ -601,6 +473,5 @@ if ($is_ajax) {
     })();
     </script>
     <?php endif; ?>
-</body>
 
-</html>
+<?php require_once 'includes/layout_footer.php'; ?>
