@@ -52,8 +52,12 @@ if (isset($_SESSION['user_id'])) {
                     <img src="https://cdn.simpleicons.org/facebook/1877F2" alt="Facebook">
                     <img src="https://cdn.simpleicons.org/instagram/E4405F" alt="Instagram">
                     <img src="https://cdn.simpleicons.org/telegram/26A5E4" alt="Telegram">
-                    <img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="LinkedIn">
-                    <img src="https://cdn.simpleicons.org/tiktok/000000" alt="TikTok">
+<img src="https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/linkedin.svg" 
+     alt="LinkedIn" 
+     width="24" 
+     height="24" 
+     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);">  
+                       <img src="https://cdn.simpleicons.org/tiktok/000000" alt="TikTok">
                 </div>
             </div>
 
@@ -69,7 +73,11 @@ if (isset($_SESSION['user_id'])) {
                 <div class="hub-icon hub-icon-1"><img src="https://cdn.simpleicons.org/facebook/1877F2" alt=""></div>
                 <div class="hub-icon hub-icon-2"><img src="https://cdn.simpleicons.org/instagram/E4405F" alt=""></div>
                 <div class="hub-icon hub-icon-3"><img src="https://cdn.simpleicons.org/telegram/26A5E4" alt=""></div>
-                <div class="hub-icon hub-icon-4"><img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt=""></div>
+                <div class="hub-icon hub-icon-4"><img src="https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/linkedin.svg" 
+     alt="LinkedIn" 
+     width="24" 
+     height="24" 
+     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);"></div>
                 <div class="hub-icon hub-icon-5"><img src="https://cdn.simpleicons.org/tiktok/000000" alt=""></div>
 
                 <div class="hub-chip hub-chip-scheduled">

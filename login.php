@@ -166,8 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
                             <img src="https://cdn.simpleicons.org/facebook/1877F2" alt="">
                             <img src="https://cdn.simpleicons.org/instagram/E4405F" alt="">
                             <img src="https://cdn.simpleicons.org/telegram/26A5E4" alt="">
-                            <img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="">
-                            <img src="https://cdn.simpleicons.org/tiktok/000000" alt="">
+<img src="https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/linkedin.svg" 
+     alt="LinkedIn" 
+     width="24" 
+     height="24" 
+     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);">                        
+         <img src="https://cdn.simpleicons.org/tiktok/000000" alt="">
                         </div>
                     </div>
                 </div>
