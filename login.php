@@ -90,8 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
                 </div>
 
                 <div class="login-heading">
-                    <h1>Welcome back</h1>
-                    <p>Log in to keep your posts on schedule.</p>
+                    <h1>Login to your account</h1>
+                    <p>Enter your credentials below to continue.</p>
                 </div>
 
                 <?php if ($error): ?>
@@ -134,9 +134,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
             <div class="showcase-glow showcase-glow-2"></div>
 
             <div class="showcase-content">
-                <span class="showcase-eyebrow">All your channels, one place</span>
-                <h2>Plan it once.<br>Publish everywhere.</h2>
-                <p>Schedule and track posts across Facebook, Instagram, Telegram, LinkedIn, and TikTok from a single dashboard.</p>
+                <span class="showcase-eyebrow">Great to see you again</span>
+                <h2>Welcome<br>back</h2>
+                <p>Log in to pick up right where you left off — schedule, publish, and track every platform from one place.</p>
             </div>
 
             <div class="showcase-mockup-wrap" aria-hidden="true">
