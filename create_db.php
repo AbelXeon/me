@@ -64,6 +64,7 @@ if ($driver === 'sqlite') {
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP,
             published_at    TIMESTAMP,
+            comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
             created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE RESTRICT
@@ -114,7 +115,7 @@ if ($driver === 'sqlite') {
             status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','posted','failed')),
             error_message       TEXT,
             posted_at           TIMESTAMP,
-            comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            comments_enabled    BOOLEAN NOT NULL DEFAULT TRUE,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
         );
 
@@ -208,8 +209,6 @@ SQL;
             FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE RESTRICT
         );
 
-        
-
         CREATE TABLE post_extra_media (
             id              SERIAL PRIMARY KEY,
             post_id         INTEGER NOT NULL,
@@ -255,6 +254,7 @@ SQL;
             status              VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','posted','failed')),
             error_message       TEXT,
             posted_at           TIMESTAMP,
+            comments_enabled    BOOLEAN NOT NULL DEFAULT TRUE,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
         );
 
@@ -341,6 +341,7 @@ SQL;
                                 CHECK (status IN ('draft','scheduled','posted','failed')),
             scheduled_at    TIMESTAMP NULL,
             published_at    TIMESTAMP NULL,
+            comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
             created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE RESTRICT
@@ -391,6 +392,7 @@ SQL;
             status              VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','posted','failed')),
             error_message       TEXT,
             posted_at           TIMESTAMP NULL,
+            comments_enabled    BOOLEAN NOT NULL DEFAULT TRUE,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
         );
 
