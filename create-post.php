@@ -30,11 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
-        // Comments toggle: only meaningful for Instagram/TikTok, but harmless to
-        // store for every post. Defaults to enabled (1) if the field is missing
-        // or anything other than an explicit "0".
-        $comments_enabled = (isset($_POST['comments_enabled']) && $_POST['comments_enabled'] === '0') ? 0 : 1;
-        
+        // Per-platform comments toggle. Each platform (instagram, tiktok) gets
+        // its own value in $comments_enabled_map. Defaults to enabled (1).
+        $comments_enabled_map = $_POST['comments_enabled'] ?? [];
+
         if (!empty($scheduled_at)) {
             $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
         }
@@ -117,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $post_status = $is_scheduled ? 'scheduled' : 'draft';
 
                 $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at, comments_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null, $comments_enabled]);
+                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null, 1]);
                 $post_id = $conn->lastInsertId();
 
                 if (count($uploaded_media_ids) > 1) {
@@ -127,9 +126,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // Store per-platform comments_enabled so each platform can be
+                // controlled independently (e.g. disable on TikTok, enable on IG).
                 foreach ($platforms as $platform) {
-                    $stmt = $conn->prepare("INSERT INTO post_platforms (post_id, platform, status) VALUES (?, ?, 'pending')");
-                    $stmt->execute([$post_id, $platform]);
+                    $platform_comments_enabled = isset($comments_enabled_map[$platform]) ? (int)$comments_enabled_map[$platform] : 1;
+                    $stmt = $conn->prepare("INSERT INTO post_platforms (post_id, platform, status, comments_enabled) VALUES (?, ?, 'pending', ?)");
+                    $stmt->execute([$post_id, $platform, $platform_comments_enabled]);
                 }
 
                 $conn->commit();
@@ -179,7 +181,6 @@ require_once 'includes/layout_header.php';
                     You haven't connected any platforms yet. <a href="settings.php">Go connect one first &rarr;</a>
                 </div>
             <?php else: ?>
-                <!-- Added id='postForm' here so JS can target it -->
                 <form id="postForm" method="POST" action="" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
@@ -203,7 +204,6 @@ require_once 'includes/layout_header.php';
                                 <div class="form-group">
                                     <label for="mediaInput">Media</label>
 
-                                    <!-- Added id='mediaInput' here -->
                                     <input type="file" id="mediaInput" name="media[]" accept="image/*,video/*" multiple required class="file-input-hidden">
 
                                     <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Select media files">
@@ -230,42 +230,42 @@ require_once 'includes/layout_header.php';
                                     <div class="platform-checkboxes">
                                         <?php foreach ($connected as $platform => $account_name): ?>
                                             <?php if (isset($platform_meta[$platform])): ?>
-                                                <label class="platform-checkbox">
-                                                    <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
-                                                    <span class="platform-checkbox-inner">
-                                                        <img src="<?php echo htmlspecialchars($platform_meta[$platform]['icon']); ?>" alt="<?php echo htmlspecialchars($platform_meta[$platform]['label']); ?>" class="platform-icon">
-                                                        <span class="platform-text">
-                                                            <span class="platform-name"><?php echo htmlspecialchars($platform_meta[$platform]['label']); ?></span>
-                                                            <span class="platform-account"><?php echo htmlspecialchars($account_name); ?></span>
+                                                <?php $supports_comments = in_array($platform, ['instagram', 'tiktok']); ?>
+                                                <div class="platform-checkbox" data-platform="<?php echo htmlspecialchars($platform); ?>">
+                                                    <label class="platform-select">
+                                                        <input type="checkbox" name="platforms[]" value="<?php echo htmlspecialchars($platform); ?>">
+                                                        <span class="platform-checkbox-inner">
+                                                            <img src="<?php echo htmlspecialchars($platform_meta[$platform]['icon']); ?>" alt="<?php echo htmlspecialchars($platform_meta[$platform]['label']); ?>" class="platform-icon">
+                                                            <span class="platform-text">
+                                                                <span class="platform-name"><?php echo htmlspecialchars($platform_meta[$platform]['label']); ?></span>
+                                                                <span class="platform-account"><?php echo htmlspecialchars($account_name); ?></span>
+                                                            </span>
+                                                            <span class="platform-check">
+                                                                <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                                    <path d="M20 6 9 17l-5-5"/>
+                                                                </svg>
+                                                            </span>
                                                         </span>
-                                                        <span class="platform-check">
-                                                            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                                                                <path d="M20 6 9 17l-5-5"/>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                </label>
+                                                    </label>
+                                                    <?php if ($supports_comments): ?>
+                                                    <div class="platform-comments-row" hidden>
+                                                        <span class="comments-label">Allow comments</span>
+                                                        <label class="switch switch-sm">
+                                                            <input type="checkbox" class="comments-toggle" data-platform="<?php echo htmlspecialchars($platform); ?>" checked>
+                                                            <span class="switch-slider"></span>
+                                                        </label>
+                                                    </div>
+                                                    <?php endif; ?>
+                                                </div>
                                             <?php endif; ?>
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="form-card" id="commentsCard" hidden>
-                                <div class="form-group">
-                                    <label class="switch-row" for="commentsToggle">
-                                        <span class="switch-text">
-                                            <strong>Allow comments</strong>
-                                            <span>Applies to Instagram and TikTok</span>
-                                        </span>
-                                        <span class="switch">
-                                            <input type="checkbox" id="commentsToggle" checked>
-                                            <span class="switch-slider"></span>
-                                        </span>
-                                    </label>
-                                </div>
-                            </div>
-                            <input type="hidden" name="comments_enabled" id="commentsEnabledField" value="1">
+                            <!-- Per-platform comments_enabled hidden fields -->
+                            <input type="hidden" name="comments_enabled[instagram]" id="comments_enabled_instagram" value="1">
+                            <input type="hidden" name="comments_enabled[tiktok]" id="comments_enabled_tiktok" value="1">
 
                             <div class="form-card">
                                 <div class="form-group">
@@ -327,32 +327,40 @@ require_once 'includes/layout_header.php';
                 </form>
             <?php endif; ?>
 
-    <!-- ===== Comments toggle (Instagram / TikTok only) ===== -->
+    <!-- ===== Per-platform comments toggle (Instagram / TikTok) ===== -->
     <script>
     (function() {
-        const commentsCard = document.getElementById('commentsCard');
-        const commentsToggle = document.getElementById('commentsToggle');
-        const commentsEnabledField = document.getElementById('commentsEnabledField');
         const platformCheckboxes = document.querySelectorAll('input[name="platforms[]"]');
-        if (!commentsCard || !commentsToggle || !commentsEnabledField) return;
+        const commentsToggles = document.querySelectorAll('.comments-toggle');
 
-        function relevantPlatformSelected() {
-            return Array.from(platformCheckboxes).some(cb => cb.checked && (cb.value === 'instagram' || cb.value === 'tiktok'));
+        function updateHiddenField(platform, enabled) {
+            const field = document.getElementById('comments_enabled_' + platform);
+            if (field) field.value = enabled ? '1' : '0';
         }
 
-        function syncCommentsCardVisibility() {
-            commentsCard.hidden = !relevantPlatformSelected();
+        function syncCommentsRow(checkbox) {
+            const card = checkbox.closest('.platform-checkbox');
+            if (!card) return;
+            const commentsRow = card.querySelector('.platform-comments-row');
+            if (commentsRow) {
+                commentsRow.hidden = !checkbox.checked;
+            }
         }
 
-        platformCheckboxes.forEach(cb => cb.addEventListener('change', syncCommentsCardVisibility));
-
-        commentsToggle.addEventListener('change', () => {
-            commentsEnabledField.value = commentsToggle.checked ? '1' : '0';
+        // Wire up each per-platform toggle to its hidden field
+        commentsToggles.forEach(toggle => {
+            const platform = toggle.dataset.platform;
+            updateHiddenField(platform, toggle.checked);
+            toggle.addEventListener('change', () => {
+                updateHiddenField(platform, toggle.checked);
+            });
         });
 
-        // Runs on load too, in case the form re-rendered after a validation
-        // error with platforms already checked.
-        syncCommentsCardVisibility();
+        // Show/hide the comments row based on whether the platform is selected
+        platformCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => syncCommentsRow(cb));
+            syncCommentsRow(cb);
+        });
     })();
     </script>
 
@@ -586,8 +594,6 @@ require_once 'includes/layout_header.php';
 
         renderCalendar();
 
-        // If the form re-rendered after a validation error and a schedule was
-        // already set, restore it instead of dropping back to "Post now".
         if (hiddenField.value) {
             const parts = hiddenField.value.split('T');
             const dateParts = (parts[0] || '').split('-').map(Number);
@@ -614,7 +620,7 @@ require_once 'includes/layout_header.php';
         const fileInput = document.getElementById('mediaInput');
         if (!fileInput.files.length) return;
 
-        e.preventDefault(); // Stop form submission temporarily to compress [1.1.2]
+        e.preventDefault();
         
         const submitBtn = this.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
@@ -625,24 +631,22 @@ require_once 'includes/layout_header.php';
         for (let i = 0; i < fileInput.files.length; i++) {
             const file = fileInput.files[i];
             
-            // Only compress if the file is an image [1.1.2]
             if (file.type.startsWith('image/')) {
                 try {
-                    const compressedImage = await compressImage(file, 1024, 0.7); // Resizes to max 1024px width, 70% quality [1.1.2]
+                    const compressedImage = await compressImage(file, 1024, 0.7);
                     dataTransfer.add(compressedImage);
                 } catch (err) {
-                    dataTransfer.add(file); // Fallback to original if compression fails [1.1.2]
+                    dataTransfer.add(file);
                 }
             } else {
-                dataTransfer.add(file); // Keep videos completely untouched [1.1.2]
+                dataTransfer.add(file);
             }
         }
 
-        fileInput.files = dataTransfer.files; // Replace original files with compressed files [1.1.2]
-        this.submit(); // Submit the form now [1.1.2]
+        fileInput.files = dataTransfer.files;
+        this.submit();
     });
 
-    // Helper class to override the FileList array in the file input [1.1.2]
     class DataArrayItemsCollector {
         constructor() {
             this.dt = new DataTransfer();
@@ -655,7 +659,6 @@ require_once 'includes/layout_header.php';
         }
     }
 
-    // Native HTML5 Canvas Image Compression [1.1.2]
     function compressImage(file, maxDimension, quality) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -667,7 +670,6 @@ require_once 'includes/layout_header.php';
                     let width = img.width;
                     let height = img.height;
 
-                    // Calculate new dimensions keeping the aspect ratio [1.1.2]
                     if (width > height) {
                         if (width > maxDimension) {
                             height *= maxDimension / width;
@@ -687,7 +689,6 @@ require_once 'includes/layout_header.php';
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // Convert canvas to a fresh compressed Blob/File [1.1.2]
                     canvas.toBlob((blob) => {
                         if (!blob) {
                             reject(new Error("Canvas conversion failed"));

@@ -193,7 +193,7 @@
 
 .media-preview-remove:hover { background: var(--danger); }
 
-/* ---------- Platform checkboxes ---------- */
+/* ---------- Platform cards with per-platform comments toggle ---------- */
 
 .platform-checkboxes {
     display: grid;
@@ -201,7 +201,23 @@
     gap: 12px;
 }
 
-.platform-checkbox input {
+.platform-checkbox {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+
+.platform-checkbox:has(.platform-select input:checked) {
+    border-color: var(--accent);
+}
+
+.platform-select {
+    display: flex;
+    cursor: pointer;
+}
+
+.platform-select input {
     position: absolute;
     opacity: 0;
     width: 1px;
@@ -213,10 +229,8 @@
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    flex: 1;
+    transition: background 0.15s ease;
 }
 
 .platform-icon {
@@ -262,49 +276,44 @@
 
 .platform-check svg { width: 10px; height: 10px; }
 
-.platform-checkbox input:checked + .platform-checkbox-inner {
-    border-color: var(--accent);
+.platform-select input:checked + .platform-checkbox-inner {
     background: var(--accent-soft);
 }
 
-.platform-checkbox input:checked + .platform-checkbox-inner .platform-check {
+.platform-select input:checked + .platform-checkbox-inner .platform-check {
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
 }
 
-.platform-checkbox input:focus-visible + .platform-checkbox-inner {
+.platform-select input:focus-visible + .platform-checkbox-inner {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
-/* ---------- Comments toggle (Instagram / TikTok) ---------- */
+/* ---------- Per-platform comments row ---------- */
 
-.switch-row {
+.platform-comments-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    cursor: pointer;
-    margin: 0;
+    gap: 12px;
+    padding: 8px 14px 10px 14px;
+    border-top: 1px dashed var(--line);
+    background: var(--bg);
 }
 
-.switch-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+.platform-comments-row[hidden] {
+    display: none;
 }
 
-.switch-text strong {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--ink);
-}
-
-.switch-text span {
+.comments-label {
     font-size: 12px;
+    font-weight: 500;
     color: var(--slate);
 }
+
+/* ---------- Switch (shared) ---------- */
 
 .switch {
     position: relative;
@@ -359,6 +368,23 @@
     outline-offset: 2px;
 }
 
+/* Small switch variant for platform cards */
+.switch-sm {
+    width: 36px;
+    height: 20px;
+}
+
+.switch-sm .switch-slider::before {
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    top: 3px;
+}
+
+.switch-sm input:checked + .switch-slider::before {
+    transform: translateX(16px);
+}
+
 /* ---------- When to publish (now / later toggle) ---------- */
 
 .timing-toggle {
@@ -409,12 +435,6 @@
 }
 
 /* ---------- Scheduler / calendar ---------- */
-
-.scheduler {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
 
 .calendar {
     border: 1px solid var(--line);
@@ -560,19 +580,6 @@
     border-color: transparent;
     font-weight: 600;
 }
-
-.btn-clear-schedule {
-    align-self: flex-start;
-    background: none;
-    border: none;
-    color: var(--slate);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 4px 0;
-}
-
-.btn-clear-schedule:hover { color: var(--danger); }
 
 /* ---------- Submit ---------- */
 

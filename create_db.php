@@ -114,6 +114,7 @@ if ($driver === 'sqlite') {
             status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','posted','failed')),
             error_message       TEXT,
             posted_at           TIMESTAMP,
+            comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
         );
 

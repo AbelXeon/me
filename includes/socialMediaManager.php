@@ -432,213 +432,247 @@ private function refreshTikTokAccessToken($account) {
         }
     }
 
+
+
+
+
 /**
  * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
  */
-private function postToInstagram($post, &$platform_post_id, &$error_message) {
-    $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
-    $stmt->execute([$post['user_id']]);
-    $account = $stmt->fetch();
- 
-    if (!$account) {
-        $error_message = "Instagram account not connected.";
-        return false;
+ private function setInstagramCommentsEnabled($igMediaId, $enabled, $accessToken) {
+        $url = "https://graph.facebook.com/v18.0/{$igMediaId}";
+        $params = http_build_query([
+            'comment_enabled' => $enabled ? 'true' : 'false',
+            'access_token'    => $accessToken
+        ]);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url . '?' . $params);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        // No body needed — params are in the query string per the API spec.
+        curl_setopt($ch, CURLOPT_POSTFIELDS, '');
+        curl_exec($ch);
+        curl_close($ch);
     }
- 
-    $pageAccessToken = $account['access_token'];
-    $instagramId = $account['platform_user_id'];
- 
-    $finalCaption = $post['caption'];
-    if (!empty($post['external_link'])) {
-        $finalCaption .= "\n\n" . $post['external_link'];
-    }
- 
-    // Comments toggle: defaults to enabled (true) if the column isn't present
-    // on $post yet, so this can't silently disable comments on posts that
-    // predate the column or on any query that hasn't been updated to select it.
-    $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
- 
-    $mediaItems = $this->getPostMediaItems($post);
- 
-    $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
-    $parsedUrl = parse_url($redirectUri);
-    $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
-    $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
- 
-    if (count($mediaItems) === 1) {
-        $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
-        $is_video = ($mediaItems[0]['type'] === 'video');
- 
-        $chContainer = curl_init();
-        curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-        curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chContainer, CURLOPT_POST, 1);
- 
-        if ($is_video) {
-            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                'media_type'      => 'REELS',
-                'video_url'       => $absoluteMediaUrl,
-                'caption'         => $finalCaption,
-                'comment_enabled' => $commentsEnabled ? 'true' : 'false',
-                'access_token'    => $pageAccessToken
-            ]);
-        } else {
-            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                'image_url'       => $absoluteMediaUrl,
-                'caption'         => $finalCaption,
-                'comment_enabled' => $commentsEnabled ? 'true' : 'false',
-                'access_token'    => $pageAccessToken
-            ]);
-        }
- 
-        $containerResponse = curl_exec($chContainer);
-        $containerResult = json_decode($containerResponse, true);
-        curl_close($chContainer);
- 
-        $creationId = $containerResult['id'] ?? null;
-        if (!$creationId) {
-            $error_message = "IG Container Error: " . ($containerResult['error']['message'] ?? 'Unknown');
+
+
+    /**
+     * Publishes images/videos (single or carousel) to linked Instagram
+     * Business Accounts.
+     *
+     * FIX: comment_enabled is no longer sent at container creation (Instagram
+     * silently ignores it there). Instead, after a successful publish, if
+     * comments are disabled we call setInstagramCommentsEnabled() which hits
+     * the IG Media update endpoint — the only place Instagram actually
+     * respects the comment toggle.
+     */
+    private function postToInstagram($post, &$platform_post_id, &$error_message) {
+        $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
+        $stmt->execute([$post['user_id']]);
+        $account = $stmt->fetch();
+
+        if (!$account) {
+            $error_message = "Instagram account not connected.";
             return false;
         }
- 
-        $isFinished = false;
-        // Video (Reels) processing can take well over a minute for larger files --
-        // 15 retries * 3s (45s total) was only really enough for images/small clips.
-        // Bump to 60 retries * 5s = up to 5 minutes for video, keep it quicker for images.
-        $retries = $is_video ? 60 : 15;
-        $pollInterval = $is_video ? 5 : 3;
-        while ($retries > 0) {
-            $chStatus = curl_init();
-            curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
-            curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chStatus, CURLOPT_SSL_VERIFYPEER, false);
-            $statusResponse = curl_exec($chStatus);
-            curl_close($chStatus);
- 
-            $statusResult = json_decode($statusResponse, true);
-            $statusCode = $statusResult['status_code'] ?? 'IN_PROGRESS';
- 
-            if ($statusCode === 'FINISHED') {
-                $isFinished = true;
-                break;
-            } elseif ($statusCode === 'ERROR') {
-                $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
+
+        $pageAccessToken = $account['access_token'];
+        $instagramId = $account['platform_user_id'];
+
+        $finalCaption = $post['caption'];
+        if (!empty($post['external_link'])) {
+            $finalCaption .= "\n\n" . $post['external_link'];
+        }
+
+        // Per-platform comments toggle (falls back to enabled if missing).
+        $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
+
+        $mediaItems = $this->getPostMediaItems($post);
+
+        $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
+        $parsedUrl = parse_url($redirectUri);
+        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+
+        // ---- SINGLE MEDIA (image or Reels video) ----
+        if (count($mediaItems) === 1) {
+            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+            $is_video = ($mediaItems[0]['type'] === 'video');
+
+            $chContainer = curl_init();
+            curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+            curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chContainer, CURLOPT_POST, 1);
+
+            if ($is_video) {
+                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                    'media_type'   => 'REELS',
+                    'video_url'    => $absoluteMediaUrl,
+                    'caption'      => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            } else {
+                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                    'image_url'    => $absoluteMediaUrl,
+                    'caption'      => $finalCaption,
+                    'access_token' => $pageAccessToken
+                ]);
+            }
+
+            $containerResponse = curl_exec($chContainer);
+            $containerResult = json_decode($containerResponse, true);
+            curl_close($chContainer);
+
+            $creationId = $containerResult['id'] ?? null;
+            if (!$creationId) {
+                $error_message = "IG Container Error: " . ($containerResult['error']['message'] ?? 'Unknown');
                 return false;
             }
-            sleep($pollInterval); 
-            $retries--;
-        }
- 
-        if (!$isFinished) {
-            $error_message = "Instagram timed out waiting for media to process.";
+
+            $isFinished = false;
+            $retries = $is_video ? 60 : 15;
+            $pollInterval = $is_video ? 5 : 3;
+            while ($retries > 0) {
+                $chStatus = curl_init();
+                curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
+                curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($chStatus, CURLOPT_SSL_VERIFYPEER, false);
+                $statusResponse = curl_exec($chStatus);
+                curl_close($chStatus);
+
+                $statusResult = json_decode($statusResponse, true);
+                $statusCode = $statusResult['status_code'] ?? 'IN_PROGRESS';
+
+                if ($statusCode === 'FINISHED') {
+                    $isFinished = true;
+                    break;
+                } elseif ($statusCode === 'ERROR') {
+                    $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
+                    return false;
+                }
+                sleep($pollInterval);
+                $retries--;
+            }
+
+            if (!$isFinished) {
+                $error_message = "Instagram timed out waiting for media to process.";
+                return false;
+            }
+
+            $chPublish = curl_init();
+            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chPublish, CURLOPT_POST, 1);
+            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+                'creation_id'  => $creationId,
+                'access_token' => $pageAccessToken
+            ]);
+            $publishResponse = curl_exec($chPublish);
+            $publishResult = json_decode($publishResponse, true);
+            curl_close($chPublish);
+
+            if (isset($publishResult['id'])) {
+                $platform_post_id = $publishResult['id'];
+                // FIX: disable comments via separate API call after publish
+                if (!$commentsEnabled) {
+                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken);
+                }
+                return true;
+            }
+
+            $error_message = "IG Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
             return false;
         }
- 
-        $chPublish = curl_init();
-        curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
-        curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chPublish, CURLOPT_POST, 1);
-        curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
-            'creation_id'  => $creationId,
-            'access_token' => $pageAccessToken
-        ]);
-        $publishResponse = curl_exec($chPublish);
-        $publishResult = json_decode($publishResponse, true);
-        curl_close($chPublish);
- 
-        if (isset($publishResult['id'])) {
-            $platform_post_id = $publishResult['id'];
-            return true;
-        }
- 
-        $error_message = "IG Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
-        return false;
-    }
- 
-    try {
-        $carouselItemIds = [];
-        foreach ($mediaItems as $item) {
-            if ($item['type'] === 'video') continue;
- 
-            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, [
-                'image_url'        => $absoluteMediaUrl,
-                'is_carousel_item' => 'true',
-                'access_token'     => $pageAccessToken
-            ]);
-            $response = curl_exec($ch);
-            curl_close($ch);
- 
-            $res = json_decode($response, true);
-            if (isset($res['id'])) {
-                $carouselItemIds[] = $res['id'];
-            }
-        }
- 
-        if (count($carouselItemIds) < 2) {
-            throw new Exception("Instagram Carousel requires at least 2 images.");
-        }
- 
-        sleep(5);
- 
-        $chMain = curl_init();
-        curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-        curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chMain, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chMain, CURLOPT_POST, 1);
-        curl_setopt($chMain, CURLOPT_POSTFIELDS, [
-            'media_type'      => 'CAROUSEL',
-            'children'        => json_encode($carouselItemIds),
-            'caption'         => $finalCaption,
-            'comment_enabled' => $commentsEnabled ? 'true' : 'false',
-            'access_token'    => $pageAccessToken
-        ]);
-        $mainResponse = curl_exec($chMain);
-        curl_close($chMain);
- 
-        $mainResult = json_decode($mainResponse, true);
-        $creationId = $mainResult['id'] ?? null;
- 
-        if (!$creationId) {
-            throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
-        }
- 
-        sleep(5);
- 
-        $chPublish = curl_init();
-        curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
-        curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($chPublish, CURLOPT_POST, 1);
-        curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
-            'creation_id'  => $creationId,
-            'access_token' => $pageAccessToken
-        ]);
-        $publishResponse = curl_exec($chPublish);
-        $publishResult = json_decode($publishResponse, true);
-        curl_close($chPublish);
- 
-        if (isset($publishResult['id'])) {
-            $platform_post_id = $publishResult['id'];
-            return true;
-        }
- 
-        $error_message = "IG Carousel Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
-        return false;
- 
-    } catch (Exception $e) {
-        $error_message = $e->getMessage();
-        return false;
-    }
-}
 
+        // ---- CAROUSEL (multiple images) ----
+        try {
+            $carouselItemIds = [];
+            foreach ($mediaItems as $item) {
+                if ($item['type'] === 'video') continue;
+
+                $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_POST, 1);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'image_url'        => $absoluteMediaUrl,
+                    'is_carousel_item' => 'true',
+                    'access_token'     => $pageAccessToken
+                ]);
+                $response = curl_exec($ch);
+                curl_close($ch);
+
+                $res = json_decode($response, true);
+                if (isset($res['id'])) {
+                    $carouselItemIds[] = $res['id'];
+                }
+            }
+
+            if (count($carouselItemIds) < 2) {
+                throw new Exception("Instagram Carousel requires at least 2 images.");
+            }
+
+            sleep(5);
+
+            $chMain = curl_init();
+            curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+            curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chMain, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chMain, CURLOPT_POST, 1);
+            curl_setopt($chMain, CURLOPT_POSTFIELDS, [
+                'media_type'   => 'CAROUSEL',
+                'children'     => json_encode($carouselItemIds),
+                'caption'      => $finalCaption,
+                'access_token' => $pageAccessToken
+            ]);
+            $mainResponse = curl_exec($chMain);
+            curl_close($chMain);
+
+            $mainResult = json_decode($mainResponse, true);
+            $creationId = $mainResult['id'] ?? null;
+
+            if (!$creationId) {
+                throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
+            }
+
+            sleep(5);
+
+            $chPublish = curl_init();
+            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($chPublish, CURLOPT_POST, 1);
+            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+                'creation_id'  => $creationId,
+                'access_token' => $pageAccessToken
+            ]);
+            $publishResponse = curl_exec($chPublish);
+            $publishResult = json_decode($publishResponse, true);
+            curl_close($chPublish);
+
+            if (isset($publishResult['id'])) {
+                $platform_post_id = $publishResult['id'];
+                // FIX: disable comments via separate API call after publish
+                if (!$commentsEnabled) {
+                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken);
+                }
+                return true;
+            }
+
+            $error_message = "IG Carousel Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
+            return false;
+
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+            return false;
+        }
+    }
 
 
 
