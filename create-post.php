@@ -30,6 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
+        // Comments toggle: only meaningful for Instagram/TikTok, but harmless to
+        // store for every post. Defaults to enabled (1) if the field is missing
+        // or anything other than an explicit "0".
+        $comments_enabled = (isset($_POST['comments_enabled']) && $_POST['comments_enabled'] === '0') ? 0 : 1;
         
         if (!empty($scheduled_at)) {
             $scheduled_at = str_replace('T', ' ', $scheduled_at) . ':00';
@@ -112,8 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_scheduled = !empty($scheduled_at);
                 $post_status = $is_scheduled ? 'scheduled' : 'draft';
 
-                $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null]);
+                $stmt = $conn->prepare("INSERT INTO posts (user_id, caption, title, external_link, media_type, media_id, status, scheduled_at, comments_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$user_id, $caption, $title ?: null, $external_link, $primary_type, $primary_media_id, $post_status, $is_scheduled ? $scheduled_at : null, $comments_enabled]);
                 $post_id = $conn->lastInsertId();
 
                 if (count($uploaded_media_ids) > 1) {
@@ -247,6 +251,22 @@ require_once 'includes/layout_header.php';
                                 </div>
                             </div>
 
+                            <div class="form-card" id="commentsCard" hidden>
+                                <div class="form-group">
+                                    <label class="switch-row" for="commentsToggle">
+                                        <span class="switch-text">
+                                            <strong>Allow comments</strong>
+                                            <span>Applies to Instagram and TikTok</span>
+                                        </span>
+                                        <span class="switch">
+                                            <input type="checkbox" id="commentsToggle" checked>
+                                            <span class="switch-slider"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                            <input type="hidden" name="comments_enabled" id="commentsEnabledField" value="1">
+
                             <div class="form-card">
                                 <div class="form-group">
                                     <label>When to publish</label>
@@ -306,6 +326,35 @@ require_once 'includes/layout_header.php';
                     </div>
                 </form>
             <?php endif; ?>
+
+    <!-- ===== Comments toggle (Instagram / TikTok only) ===== -->
+    <script>
+    (function() {
+        const commentsCard = document.getElementById('commentsCard');
+        const commentsToggle = document.getElementById('commentsToggle');
+        const commentsEnabledField = document.getElementById('commentsEnabledField');
+        const platformCheckboxes = document.querySelectorAll('input[name="platforms[]"]');
+        if (!commentsCard || !commentsToggle || !commentsEnabledField) return;
+
+        function relevantPlatformSelected() {
+            return Array.from(platformCheckboxes).some(cb => cb.checked && (cb.value === 'instagram' || cb.value === 'tiktok'));
+        }
+
+        function syncCommentsCardVisibility() {
+            commentsCard.hidden = !relevantPlatformSelected();
+        }
+
+        platformCheckboxes.forEach(cb => cb.addEventListener('change', syncCommentsCardVisibility));
+
+        commentsToggle.addEventListener('change', () => {
+            commentsEnabledField.value = commentsToggle.checked ? '1' : '0';
+        });
+
+        // Runs on load too, in case the form re-rendered after a validation
+        // error with platforms already checked.
+        syncCommentsCardVisibility();
+    })();
+    </script>
 
     <!-- ===== Media dropzone + preview ===== -->
     <script>

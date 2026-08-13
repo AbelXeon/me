@@ -161,145 +161,154 @@ class SocialMediaManager {
         return false;
     }
 
-    /**
-     * Publishes a video to TikTok's Content Posting API v2
-     */
-    private function postToTikTok($post, &$platform_post_id, &$error_message) {
-        $stmt = $this->db->prepare("SELECT id, access_token, refresh_token, token_expires_at FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
-        $stmt->execute([$post['user_id']]);
-        $account = $stmt->fetch();
 
-        if (!$account) {
-            $error_message = "TikTok account not connected.";
-            return false;
-        }
 
-        if ($post['media_file_type'] !== 'video') {
-            $error_message = "TikTok only supports video uploads.";
-            return false;
-        }
 
-        // TikTok access tokens expire after 24 hours (unlike LinkedIn's 60 days), so we
-        // proactively refresh whenever the stored token is expired or expiring within the
-        // next 5 minutes, using the refresh_token captured at connect-time. This keeps
-        // TikTok posting working indefinitely without the user ever reconnecting.
-        $accessToken = $account['access_token'];
-        $needsRefresh = true;
-        if (!empty($account['token_expires_at'])) {
-            $needsRefresh = (strtotime($account['token_expires_at']) - time()) < 300;
-        }
-
-        if ($needsRefresh) {
-            if (empty($account['refresh_token'])) {
-                $error_message = "TikTok token expired and no refresh token is stored. Please reconnect TikTok in Settings.";
-                return false;
-            }
-
-            $refreshedToken = $this->refreshTikTokAccessToken($account);
-            if (!$refreshedToken) {
-                $error_message = "TikTok token expired and refreshing it failed. Please reconnect TikTok in Settings.";
-                return false;
-            }
-            $accessToken = $refreshedToken;
-        }
-
-        $finalCaption = $post['caption'];
-        if (!empty($post['external_link'])) {
-            $finalCaption .= "\n\n" . $post['external_link'];
-        }
-
-        $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
-        $parsedUrl = parse_url($redirectUri);
-        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
-        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-        $absoluteVideoUrl = $scheme . '://' . $host . '/' . $post['media_path'];
-
-        $payload = [
-            'post_info' => [
-                'title' => $finalCaption,
-                'privacy_level' => 'SELF_ONLY',
-                'disable_duet' => false,
-                'disable_stitch' => false,
-                'disable_comment' => false
-            ],
-            'source_info' => [
-                'source' => 'PULL_FROM_URL',
-                'video_url' => $absoluteVideoUrl
-            ]
-        ];
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/post/publish/video/init/");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Authorization: Bearer {$accessToken}",
-            "Content-Type: application/json; charset=UTF-8"
-        ]);
-
-        $response = curl_exec($ch);
-        curl_close($ch);
-        $result = json_decode($response, true);
-
-        if (isset($result['error']) && $result['error']['code'] === 'ok') {
-            $platform_post_id = $result['data']['publish_id'] ?? null;
-            return true;
-        }
-
-        $error_message = $result['error']['message'] ?? 'TikTok API Error';
+/**
+ * Publishes a video to TikTok's Content Posting API v2
+ */
+private function postToTikTok($post, &$platform_post_id, &$error_message) {
+    $stmt = $this->db->prepare("SELECT id, access_token, refresh_token, token_expires_at FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
+    $stmt->execute([$post['user_id']]);
+    $account = $stmt->fetch();
+ 
+    if (!$account) {
+        $error_message = "TikTok account not connected.";
         return false;
     }
-
-    /**
-     * Uses a stored refresh_token to obtain a fresh TikTok access token, and
-     * persists the new access_token/refresh_token/expiry back to social_accounts.
-     * TikTok rotates the refresh_token on every use, so the old one must be replaced too.
-     * Returns the new access token on success, or null on failure.
-     */
-    private function refreshTikTokAccessToken($account) {
-        $clientKey = getenv('TIKTOK_CLIENT_KEY');
-        $clientSecret = getenv('TIKTOK_CLIENT_SECRET');
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/oauth/token/");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-            'client_key'    => $clientKey,
-            'client_secret' => $clientSecret,
-            'grant_type'    => 'refresh_token',
-            'refresh_token' => $account['refresh_token']
-        ]));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/x-www-form-urlencoded'
-        ]);
-
-        $response = curl_exec($ch);
-        curl_close($ch);
-        $tokenData = json_decode($response, true);
-
-        $newAccessToken  = $tokenData['access_token']  ?? ($tokenData['data']['access_token'] ?? null);
-        $newRefreshToken = $tokenData['refresh_token'] ?? ($tokenData['data']['refresh_token'] ?? null);
-        $expiresIn       = $tokenData['expires_in']    ?? ($tokenData['data']['expires_in'] ?? null);
-
-        if (!$newAccessToken) {
-            return null; // refresh_token itself may have expired (TikTok's is long-lived but not infinite)
-        }
-
-        $expiresAt = $expiresIn ? date('Y-m-d H:i:s', time() + $expiresIn) : null;
-
-        $stmtUpdate = $this->db->prepare("
-            UPDATE social_accounts 
-            SET access_token = ?, refresh_token = COALESCE(?, refresh_token), token_expires_at = ?
-            WHERE id = ?
-        ");
-        $stmtUpdate->execute([$newAccessToken, $newRefreshToken, $expiresAt, $account['id']]);
-
-        return $newAccessToken;
+ 
+    if ($post['media_file_type'] !== 'video') {
+        $error_message = "TikTok only supports video uploads.";
+        return false;
     }
+ 
+    // TikTok access tokens expire after 24 hours (unlike LinkedIn's 60 days), so we
+    // proactively refresh whenever the stored token is expired or expiring within the
+    // next 5 minutes, using the refresh_token captured at connect-time. This keeps
+    // TikTok posting working indefinitely without the user ever reconnecting.
+    $accessToken = $account['access_token'];
+    $needsRefresh = true;
+    if (!empty($account['token_expires_at'])) {
+        $needsRefresh = (strtotime($account['token_expires_at']) - time()) < 300;
+    }
+ 
+    if ($needsRefresh) {
+        if (empty($account['refresh_token'])) {
+            $error_message = "TikTok token expired and no refresh token is stored. Please reconnect TikTok in Settings.";
+            return false;
+        }
+ 
+        $refreshedToken = $this->refreshTikTokAccessToken($account);
+        if (!$refreshedToken) {
+            $error_message = "TikTok token expired and refreshing it failed. Please reconnect TikTok in Settings.";
+            return false;
+        }
+        $accessToken = $refreshedToken;
+    }
+ 
+    $finalCaption = $post['caption'];
+    if (!empty($post['external_link'])) {
+        $finalCaption .= "\n\n" . $post['external_link'];
+    }
+ 
+    // Comments toggle: defaults to enabled (false = not disabled) if the
+    // column isn't present on $post yet, matching original behavior.
+    $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
+ 
+    $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
+    $parsedUrl = parse_url($redirectUri);
+    $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+    $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+    $absoluteVideoUrl = $scheme . '://' . $host . '/' . $post['media_path'];
+ 
+    $payload = [
+        'post_info' => [
+            'title' => $finalCaption,
+            'privacy_level' => 'SELF_ONLY',
+            'disable_duet' => false,
+            'disable_stitch' => false,
+            'disable_comment' => !$commentsEnabled
+        ],
+        'source_info' => [
+            'source' => 'PULL_FROM_URL',
+            'video_url' => $absoluteVideoUrl
+        ]
+    ];
+ 
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/post/publish/video/init/");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Authorization: Bearer {$accessToken}",
+        "Content-Type: application/json; charset=UTF-8"
+    ]);
+ 
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $result = json_decode($response, true);
+ 
+    if (isset($result['error']) && $result['error']['code'] === 'ok') {
+        $platform_post_id = $result['data']['publish_id'] ?? null;
+        return true;
+    }
+ 
+    $error_message = $result['error']['message'] ?? 'TikTok API Error';
+    return false;
+}
+ 
+/**
+ * Uses a stored refresh_token to obtain a fresh TikTok access token, and
+ * persists the new access_token/refresh_token/expiry back to social_accounts.
+ * TikTok rotates the refresh_token on every use, so the old one must be replaced too.
+ * Returns the new access token on success, or null on failure.
+ */
+private function refreshTikTokAccessToken($account) {
+    $clientKey = getenv('TIKTOK_CLIENT_KEY');
+    $clientSecret = getenv('TIKTOK_CLIENT_SECRET');
+ 
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://open.tiktokapis.com/v2/oauth/token/");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'client_key'    => $clientKey,
+        'client_secret' => $clientSecret,
+        'grant_type'    => 'refresh_token',
+        'refresh_token' => $account['refresh_token']
+    ]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/x-www-form-urlencoded'
+    ]);
+ 
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $tokenData = json_decode($response, true);
+ 
+    $newAccessToken  = $tokenData['access_token']  ?? ($tokenData['data']['access_token'] ?? null);
+    $newRefreshToken = $tokenData['refresh_token'] ?? ($tokenData['data']['refresh_token'] ?? null);
+    $expiresIn       = $tokenData['expires_in']    ?? ($tokenData['data']['expires_in'] ?? null);
+ 
+    if (!$newAccessToken) {
+        return null; // refresh_token itself may have expired (TikTok's is long-lived but not infinite)
+    }
+ 
+    $expiresAt = $expiresIn ? date('Y-m-d H:i:s', time() + $expiresIn) : null;
+ 
+    $stmtUpdate = $this->db->prepare("
+        UPDATE social_accounts 
+        SET access_token = ?, refresh_token = COALESCE(?, refresh_token), token_expires_at = ?
+        WHERE id = ?
+    ");
+    $stmtUpdate->execute([$newAccessToken, $newRefreshToken, $expiresAt, $account['id']]);
+ 
+    return $newAccessToken;
+}
+
+
 
 
     /**
@@ -423,204 +432,215 @@ class SocialMediaManager {
         }
     }
 
-    /**
-     * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
-     */
-    private function postToInstagram($post, &$platform_post_id, &$error_message) {
-        $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
-        $stmt->execute([$post['user_id']]);
-        $account = $stmt->fetch();
-
-        if (!$account) {
-            $error_message = "Instagram account not connected.";
-            return false;
-        }
-
-        $pageAccessToken = $account['access_token'];
-        $instagramId = $account['platform_user_id'];
-
-        $finalCaption = $post['caption'];
-        if (!empty($post['external_link'])) {
-            $finalCaption .= "\n\n" . $post['external_link'];
-        }
-
-        $mediaItems = $this->getPostMediaItems($post);
-
-        $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
-        $parsedUrl = parse_url($redirectUri);
-        $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
-        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
-
-        if (count($mediaItems) === 1) {
-            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
-            $is_video = ($mediaItems[0]['type'] === 'video');
-
-            $chContainer = curl_init();
-            curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-            curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($chContainer, CURLOPT_POST, 1);
-
-            if ($is_video) {
-                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                    'media_type'   => 'REELS',
-                    'video_url'    => $absoluteMediaUrl,
-                    'caption'      => $finalCaption,
-                    'access_token' => $pageAccessToken
-                ]);
-            } else {
-                curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
-                    'image_url'    => $absoluteMediaUrl,
-                    'caption'      => $finalCaption,
-                    'access_token' => $pageAccessToken
-                ]);
-            }
-
-            $containerResponse = curl_exec($chContainer);
-            $containerResult = json_decode($containerResponse, true);
-            curl_close($chContainer);
-
-            $creationId = $containerResult['id'] ?? null;
-            if (!$creationId) {
-                $error_message = "IG Container Error: " . ($containerResult['error']['message'] ?? 'Unknown');
-                return false;
-            }
-
-            $isFinished = false;
-            // Video (Reels) processing can take well over a minute for larger files --
-            // 15 retries * 3s (45s total) was only really enough for images/small clips.
-            // Bump to 60 retries * 5s = up to 5 minutes for video, keep it quicker for images.
-            $retries = $is_video ? 60 : 15;
-            $pollInterval = $is_video ? 5 : 3;
-            while ($retries > 0) {
-                $chStatus = curl_init();
-                curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
-                curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($chStatus, CURLOPT_SSL_VERIFYPEER, false);
-                $statusResponse = curl_exec($chStatus);
-                curl_close($chStatus);
-
-                $statusResult = json_decode($statusResponse, true);
-                $statusCode = $statusResult['status_code'] ?? 'IN_PROGRESS';
-
-                if ($statusCode === 'FINISHED') {
-                    $isFinished = true;
-                    break;
-                } elseif ($statusCode === 'ERROR') {
-                    $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
-                    return false;
-                }
-                sleep($pollInterval); 
-                $retries--;
-            }
-
-            if (!$isFinished) {
-                $error_message = "Instagram timed out waiting for media to process.";
-                return false;
-            }
-
-            $chPublish = curl_init();
-            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
-            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($chPublish, CURLOPT_POST, 1);
-            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
-                'creation_id'  => $creationId,
-                'access_token' => $pageAccessToken
-            ]);
-            $publishResponse = curl_exec($chPublish);
-            $publishResult = json_decode($publishResponse, true);
-            curl_close($chPublish);
-
-            if (isset($publishResult['id'])) {
-                $platform_post_id = $publishResult['id'];
-                return true;
-            }
-
-            $error_message = "IG Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
-            return false;
-        }
-
-        try {
-            $carouselItemIds = [];
-            foreach ($mediaItems as $item) {
-                if ($item['type'] === 'video') continue;
-
-                $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
-                $ch = curl_init();
-                curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_POST, 1);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, [
-                    'image_url'        => $absoluteMediaUrl,
-                    'is_carousel_item' => 'true',
-                    'access_token'     => $pageAccessToken
-                ]);
-                $response = curl_exec($ch);
-                curl_close($ch);
-
-                $res = json_decode($response, true);
-                if (isset($res['id'])) {
-                    $carouselItemIds[] = $res['id'];
-                }
-            }
-
-            if (count($carouselItemIds) < 2) {
-                throw new Exception("Instagram Carousel requires at least 2 images.");
-            }
-
-            sleep(5);
-
-            $chMain = curl_init();
-            curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
-            curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chMain, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($chMain, CURLOPT_POST, 1);
-            curl_setopt($chMain, CURLOPT_POSTFIELDS, [
-                'media_type'   => 'CAROUSEL',
-                'children'     => json_encode($carouselItemIds),
-                'caption'      => $finalCaption,
-                'access_token' => $pageAccessToken
-            ]);
-            $mainResponse = curl_exec($chMain);
-            curl_close($chMain);
-
-            $mainResult = json_decode($mainResponse, true);
-            $creationId = $mainResult['id'] ?? null;
-
-            if (!$creationId) {
-                throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
-            }
-
-            sleep(5);
-
-            $chPublish = curl_init();
-            curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
-            curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($chPublish, CURLOPT_POST, 1);
-            curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
-                'creation_id'  => $creationId,
-                'access_token' => $pageAccessToken
-            ]);
-            $publishResponse = curl_exec($chPublish);
-            $publishResult = json_decode($publishResponse, true);
-            curl_close($chPublish);
-
-            if (isset($publishResult['id'])) {
-                $platform_post_id = $publishResult['id'];
-                return true;
-            }
-
-            $error_message = "IG Carousel Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
-            return false;
-
-        } catch (Exception $e) {
-            $error_message = $e->getMessage();
-            return false;
-        }
+/**
+ * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
+ */
+private function postToInstagram($post, &$platform_post_id, &$error_message) {
+    $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
+    $stmt->execute([$post['user_id']]);
+    $account = $stmt->fetch();
+ 
+    if (!$account) {
+        $error_message = "Instagram account not connected.";
+        return false;
     }
+ 
+    $pageAccessToken = $account['access_token'];
+    $instagramId = $account['platform_user_id'];
+ 
+    $finalCaption = $post['caption'];
+    if (!empty($post['external_link'])) {
+        $finalCaption .= "\n\n" . $post['external_link'];
+    }
+ 
+    // Comments toggle: defaults to enabled (true) if the column isn't present
+    // on $post yet, so this can't silently disable comments on posts that
+    // predate the column or on any query that hasn't been updated to select it.
+    $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
+ 
+    $mediaItems = $this->getPostMediaItems($post);
+ 
+    $redirectUri = getenv('FB_REDIRECT_URI') ?: '';
+    $parsedUrl = parse_url($redirectUri);
+    $scheme = isset($parsedUrl['scheme']) ? $parsedUrl['scheme'] : 'https';
+    $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'me-wpv3.onrender.com';
+ 
+    if (count($mediaItems) === 1) {
+        $absoluteMediaUrl = $scheme . '://' . $host . '/' . $mediaItems[0]['path'];
+        $is_video = ($mediaItems[0]['type'] === 'video');
+ 
+        $chContainer = curl_init();
+        curl_setopt($chContainer, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+        curl_setopt($chContainer, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($chContainer, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($chContainer, CURLOPT_POST, 1);
+ 
+        if ($is_video) {
+            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                'media_type'      => 'REELS',
+                'video_url'       => $absoluteMediaUrl,
+                'caption'         => $finalCaption,
+                'comment_enabled' => $commentsEnabled ? 'true' : 'false',
+                'access_token'    => $pageAccessToken
+            ]);
+        } else {
+            curl_setopt($chContainer, CURLOPT_POSTFIELDS, [
+                'image_url'       => $absoluteMediaUrl,
+                'caption'         => $finalCaption,
+                'comment_enabled' => $commentsEnabled ? 'true' : 'false',
+                'access_token'    => $pageAccessToken
+            ]);
+        }
+ 
+        $containerResponse = curl_exec($chContainer);
+        $containerResult = json_decode($containerResponse, true);
+        curl_close($chContainer);
+ 
+        $creationId = $containerResult['id'] ?? null;
+        if (!$creationId) {
+            $error_message = "IG Container Error: " . ($containerResult['error']['message'] ?? 'Unknown');
+            return false;
+        }
+ 
+        $isFinished = false;
+        // Video (Reels) processing can take well over a minute for larger files --
+        // 15 retries * 3s (45s total) was only really enough for images/small clips.
+        // Bump to 60 retries * 5s = up to 5 minutes for video, keep it quicker for images.
+        $retries = $is_video ? 60 : 15;
+        $pollInterval = $is_video ? 5 : 3;
+        while ($retries > 0) {
+            $chStatus = curl_init();
+            curl_setopt($chStatus, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$creationId}?fields=status_code&access_token=" . urlencode($pageAccessToken));
+            curl_setopt($chStatus, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chStatus, CURLOPT_SSL_VERIFYPEER, false);
+            $statusResponse = curl_exec($chStatus);
+            curl_close($chStatus);
+ 
+            $statusResult = json_decode($statusResponse, true);
+            $statusCode = $statusResult['status_code'] ?? 'IN_PROGRESS';
+ 
+            if ($statusCode === 'FINISHED') {
+                $isFinished = true;
+                break;
+            } elseif ($statusCode === 'ERROR') {
+                $error_message = "Instagram Media Processing Error: " . ($statusResult['error_message'] ?? 'Unknown.');
+                return false;
+            }
+            sleep($pollInterval); 
+            $retries--;
+        }
+ 
+        if (!$isFinished) {
+            $error_message = "Instagram timed out waiting for media to process.";
+            return false;
+        }
+ 
+        $chPublish = curl_init();
+        curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+        curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($chPublish, CURLOPT_POST, 1);
+        curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+            'creation_id'  => $creationId,
+            'access_token' => $pageAccessToken
+        ]);
+        $publishResponse = curl_exec($chPublish);
+        $publishResult = json_decode($publishResponse, true);
+        curl_close($chPublish);
+ 
+        if (isset($publishResult['id'])) {
+            $platform_post_id = $publishResult['id'];
+            return true;
+        }
+ 
+        $error_message = "IG Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
+        return false;
+    }
+ 
+    try {
+        $carouselItemIds = [];
+        foreach ($mediaItems as $item) {
+            if ($item['type'] === 'video') continue;
+ 
+            $absoluteMediaUrl = $scheme . '://' . $host . '/' . $item['path'];
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                'image_url'        => $absoluteMediaUrl,
+                'is_carousel_item' => 'true',
+                'access_token'     => $pageAccessToken
+            ]);
+            $response = curl_exec($ch);
+            curl_close($ch);
+ 
+            $res = json_decode($response, true);
+            if (isset($res['id'])) {
+                $carouselItemIds[] = $res['id'];
+            }
+        }
+ 
+        if (count($carouselItemIds) < 2) {
+            throw new Exception("Instagram Carousel requires at least 2 images.");
+        }
+ 
+        sleep(5);
+ 
+        $chMain = curl_init();
+        curl_setopt($chMain, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media");
+        curl_setopt($chMain, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($chMain, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($chMain, CURLOPT_POST, 1);
+        curl_setopt($chMain, CURLOPT_POSTFIELDS, [
+            'media_type'      => 'CAROUSEL',
+            'children'        => json_encode($carouselItemIds),
+            'caption'         => $finalCaption,
+            'comment_enabled' => $commentsEnabled ? 'true' : 'false',
+            'access_token'    => $pageAccessToken
+        ]);
+        $mainResponse = curl_exec($chMain);
+        curl_close($chMain);
+ 
+        $mainResult = json_decode($mainResponse, true);
+        $creationId = $mainResult['id'] ?? null;
+ 
+        if (!$creationId) {
+            throw new Exception("Main IG Carousel Error: " . ($mainResult['error']['message'] ?? 'Unknown'));
+        }
+ 
+        sleep(5);
+ 
+        $chPublish = curl_init();
+        curl_setopt($chPublish, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$instagramId}/media_publish");
+        curl_setopt($chPublish, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($chPublish, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($chPublish, CURLOPT_POST, 1);
+        curl_setopt($chPublish, CURLOPT_POSTFIELDS, [
+            'creation_id'  => $creationId,
+            'access_token' => $pageAccessToken
+        ]);
+        $publishResponse = curl_exec($chPublish);
+        $publishResult = json_decode($publishResponse, true);
+        curl_close($chPublish);
+ 
+        if (isset($publishResult['id'])) {
+            $platform_post_id = $publishResult['id'];
+            return true;
+        }
+ 
+        $error_message = "IG Carousel Publish Error: " . ($publishResult['error']['message'] ?? 'Unknown');
+        return false;
+ 
+    } catch (Exception $e) {
+        $error_message = $e->getMessage();
+        return false;
+    }
+}
+
+
+
 
     /**
      * Publishes text, multiple images, or a native video to a LinkedIn Profile

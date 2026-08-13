@@ -205,6 +205,9 @@ SQL;
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (media_id) REFERENCES media_files(id) ON DELETE RESTRICT
         );
+        
+ALTER TABLE posts ADD COLUMN comments_enabled TINYINT(1) NOT NULL DEFAULT 1;
+        
 
         CREATE TABLE post_extra_media (
             id              SERIAL PRIMARY KEY,
