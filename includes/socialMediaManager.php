@@ -439,22 +439,32 @@ private function refreshTikTokAccessToken($account) {
 /**
  * Publishes images/videos (single or carousel) to linked Instagram Business Accounts
  */
- private function setInstagramCommentsEnabled($igMediaId, $enabled, $accessToken) {
-        $url = "https://graph.facebook.com/v18.0/{$igMediaId}";
-        $params = http_build_query([
-            'comment_enabled' => $enabled ? 'true' : 'false',
-            'access_token'    => $accessToken
-        ]);
-
+ private function setInstagramCommentsEnabled($igMediaId, $enabled, $accessToken, &$debugError = null) {
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url . '?' . $params);
+        curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/v18.0/{$igMediaId}");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_POST, 1);
-        // No body needed — params are in the query string per the API spec.
-        curl_setopt($ch, CURLOPT_POSTFIELDS, '');
-        curl_exec($ch);
+        // Send as POST body fields — this is the standard Graph API convention
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'comment_enabled' => $enabled ? 'true' : 'false',
+            'access_token'    => $accessToken
+        ]));
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        // The API returns {"result": "true"} on success (or just "true")
+        if (isset($result['error'])) {
+            $debugError = "IG comment toggle failed (HTTP {$httpCode}): " .
+                ($result['error']['message'] ?? $response);
+            return false;
+        }
+
+        return true;
     }
 
 
@@ -462,11 +472,10 @@ private function refreshTikTokAccessToken($account) {
      * Publishes images/videos (single or carousel) to linked Instagram
      * Business Accounts.
      *
-     * FIX: comment_enabled is no longer sent at container creation (Instagram
-     * silently ignores it there). Instead, after a successful publish, if
-     * comments are disabled we call setInstagramCommentsEnabled() which hits
-     * the IG Media update endpoint — the only place Instagram actually
-     * respects the comment toggle.
+     * FIX v2: This method now looks up its OWN comments_enabled value from
+     * post_platforms — no dependency on sendPost passing it. After a
+     * successful publish, if comments are disabled, a separate API call
+     * disables them on the live post (the only way Instagram respects it).
      */
     private function postToInstagram($post, &$platform_post_id, &$error_message) {
         $stmt = $this->db->prepare("SELECT access_token, platform_user_id FROM social_accounts WHERE user_id = ? AND platform = 'instagram' AND status = 1");
@@ -481,13 +490,20 @@ private function refreshTikTokAccessToken($account) {
         $pageAccessToken = $account['access_token'];
         $instagramId = $account['platform_user_id'];
 
+        // SELF-CONTAINED: look up THIS platform's comments_enabled directly
+        // from post_platforms, so we don't depend on sendPost passing it.
+        $commentsEnabled = true; // safe default
+        $ppStmt = $this->db->prepare("SELECT comments_enabled FROM post_platforms WHERE post_id = ? AND platform = 'instagram' LIMIT 1");
+        $ppStmt->execute([$post['id']]);
+        $ppRow = $ppStmt->fetch();
+        if ($ppRow) {
+            $commentsEnabled = (bool)$ppRow['comments_enabled'];
+        }
+
         $finalCaption = $post['caption'];
         if (!empty($post['external_link'])) {
             $finalCaption .= "\n\n" . $post['external_link'];
         }
-
-        // Per-platform comments toggle (falls back to enabled if missing).
-        $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
 
         $mediaItems = $this->getPostMediaItems($post);
 
@@ -577,9 +593,15 @@ private function refreshTikTokAccessToken($account) {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
-                // FIX: disable comments via separate API call after publish
+                // Disable comments via separate API call if requested.
+                // 3-second delay lets Instagram fully register the media first.
                 if (!$commentsEnabled) {
-                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken);
+                    sleep(3);
+                    $debugError = null;
+                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken, $debugError);
+                    if ($debugError) {
+                        error_log($debugError);
+                    }
                 }
                 return true;
             }
@@ -658,9 +680,13 @@ private function refreshTikTokAccessToken($account) {
 
             if (isset($publishResult['id'])) {
                 $platform_post_id = $publishResult['id'];
-                // FIX: disable comments via separate API call after publish
                 if (!$commentsEnabled) {
-                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken);
+                    sleep(3);
+                    $debugError = null;
+                    $this->setInstagramCommentsEnabled($platform_post_id, false, $pageAccessToken, $debugError);
+                    if ($debugError) {
+                        error_log($debugError);
+                    }
                 }
                 return true;
             }
@@ -673,6 +699,7 @@ private function refreshTikTokAccessToken($account) {
             return false;
         }
     }
+
 
 
 
