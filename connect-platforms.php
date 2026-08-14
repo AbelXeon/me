@@ -39,7 +39,8 @@ if ($platform === 'tiktok') {
         'pages_read_engagement',
         'instagram_basic',
         'instagram_content_publish',
-        'business_management'
+        'business_management',
+        'instagram_manage_comments'
     ];
 
     $authUrl = "https://www.facebook.com/v18.0/dialog/oauth/?" . http_build_query([
