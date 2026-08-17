@@ -257,6 +257,6 @@ require_once 'includes/layout_header.php';
                 </div>
             </div>
 
-    <script src="assets/js/settings.js"></script>
+    <script src="assets/js/settings.js?v=2"></script>
 
 <?php require_once 'includes/layout_footer.php'; ?>
