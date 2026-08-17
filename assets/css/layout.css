@@ -1,5 +1,5 @@
 /* ============================================================
-   Shared Layout — Social Media Manager
+   Shared Layout — LEYKUN Social Media Management
    Sidebar + topbar + shell + alerts + responsive base
    (page-specific styles live in each page's own stylesheet)
    ============================================================ */
@@ -92,11 +92,25 @@ button { font-family: inherit; }
 
 .sidebar-brand .brand-mark svg { width: 18px; height: 18px; }
 
-.sidebar-brand span {
+.sidebar-brand-text {
+    min-width: 0;
+}
+
+.sidebar-brand .brand-name {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 17px;
-    letter-spacing: -0.01em;
+    font-size: 16px;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+}
+
+.sidebar-brand .brand-tagline {
+    font-size: 10.5px;
+    color: var(--slate);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sidebar-section-label {

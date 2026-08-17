@@ -3,24 +3,334 @@
    (shell/sidebar/topbar/alerts live in layout.css)
    ============================================================ */
 
-/* ---------- Overview / coming soon panel ---------- */
+/* ---------- Stat cards ---------- */
 
-.overview-panel {
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    padding: 72px 40px;
+    padding: 20px 22px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    gap: 6px;
+}
+
+.stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--slate);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.1;
+}
+
+.stat-value-success { color: var(--success); }
+.stat-value-warning { color: var(--warning); }
+
+.stat-value-of {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--slate);
+    margin-left: 2px;
+}
+
+.stat-sub {
+    font-size: 12px;
+    color: var(--slate);
+}
+
+.stat-sub a {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.stat-sub a:hover { text-decoration: underline; }
+
+/* ---------- Dashboard cards (chart / breakdown / recent) ---------- */
+
+.dash-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: stretch;
+}
+
+.dash-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 22px 24px;
+    margin-bottom: 16px;
+}
+
+.dash-grid .dash-card {
+    margin-bottom: 0;
+}
+
+.dash-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.dash-card-header h3 {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.dash-card-hint {
+    font-size: 12px;
+    color: var(--slate);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.dash-card-link {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.dash-card-link:hover { text-decoration: underline; }
+
+.dash-empty {
+    font-size: 13.5px;
+    color: var(--slate);
+    padding: 20px 4px;
     text-align: center;
 }
 
-.overview-panel h2 {
-    font-size: 22px;
-    font-weight: 700;
+.dash-empty a {
+    color: var(--accent);
+    font-weight: 600;
 }
+
+/* ---------- Activity chart (14-day bars) ---------- */
+
+.activity-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 140px;
+}
+
+.activity-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    gap: 6px;
+}
+
+.activity-bar {
+    width: 100%;
+    max-width: 22px;
+    border-radius: 5px 5px 2px 2px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-soft) 100%);
+    position: relative;
+    display: flex;
+    justify-content: center;
+    transition: opacity 0.15s ease;
+}
+
+.activity-bar-wrap:hover .activity-bar { opacity: 0.8; }
+
+.activity-bar-count {
+    position: absolute;
+    top: -18px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.activity-bar-wrap:hover .activity-bar-count { opacity: 1; }
+
+.activity-bar-label {
+    font-size: 10px;
+    color: var(--slate);
+    font-weight: 500;
+}
+
+/* ---------- Platform breakdown ---------- */
+
+.platform-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.pb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pb-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    flex-shrink: 0;
+}
+
+.pb-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    width: 66px;
+    flex-shrink: 0;
+}
+
+.pb-track {
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    overflow: hidden;
+}
+
+.pb-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.pb-count {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    width: 20px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ---------- Recent activity list ---------- */
+
+.recent-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.recent-row {
+    display: flex;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.recent-row:last-child { border-bottom: none; padding-bottom: 0; }
+.recent-row:first-child { padding-top: 0; }
+
+.recent-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--ink);
+    flex-shrink: 0;
+}
+
+.recent-thumb img,
+.recent-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.recent-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.recent-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.recent-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recent-caption {
+    font-size: 12.5px;
+    color: var(--slate);
+    line-height: 1.5;
+    margin: 0 0 8px 0;
+}
+
+.recent-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.recent-date {
+    font-size: 11.5px;
+    color: var(--slate);
+}
+
+.recent-platforms {
+    display: flex;
+    gap: 5px;
+}
+
+.recent-platforms img {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+/* ---------- Status badges (shared look with Post History) ---------- */
+
+.badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.badge-posted { background: var(--success-soft); color: var(--success); }
+.badge-scheduled { background: var(--warning-soft); color: var(--warning); }
+.badge-draft { background: var(--bg); color: var(--slate); border: 1px solid var(--line); }
+.badge-failed { background: var(--danger-soft); color: var(--danger); }
 
 /* ---------- Quick action cards ---------- */
 
@@ -28,7 +338,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
-    margin-top: 24px;
 }
 
 .nav-card {
@@ -75,6 +384,14 @@
 
 /* ---------- Responsive (page-specific) ---------- */
 
+@media (max-width: 1100px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .dash-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 520px) {
-    .overview-panel { padding: 48px 20px; }
+    .stat-grid { grid-template-columns: 1fr; }
+    .dash-card { padding: 18px; }
+    .recent-top { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .recent-meta { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
