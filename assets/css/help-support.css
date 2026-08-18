@@ -1,0 +1,269 @@
+/* ============================================================
+   Help & Support — page-specific styles
+   (shell/sidebar/topbar/alerts live in layout.css)
+   ============================================================ */
+
+.help-intro {
+    font-size: 14.5px;
+    color: var(--slate);
+    line-height: 1.6;
+    max-width: 640px;
+    margin: -8px 0 28px 0;
+}
+
+/* ---------- TOC + content shell ---------- */
+
+.help-shell {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 40px;
+    align-items: start;
+}
+
+.help-toc {
+    position: sticky;
+    top: 32px;
+}
+
+.help-toc-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-bottom: 12px;
+}
+
+.help-toc nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-left: 2px solid var(--line);
+}
+
+.toc-link {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--slate);
+    padding: 7px 0 7px 16px;
+    border-left: 2px solid transparent;
+    margin-left: -2px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.toc-link:hover { color: var(--ink); }
+
+.toc-link.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 600;
+}
+
+/* ---------- Content ---------- */
+
+.help-content {
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 8px 32px;
+}
+
+.help-section {
+    padding: 36px 0;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 24px;
+}
+
+.help-section:last-child {
+    border-bottom: none;
+}
+
+.help-section h2 {
+    font-size: 19px;
+    font-weight: 700;
+    margin-bottom: 14px;
+}
+
+.help-section p {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0 0 12px 0;
+}
+
+.help-section ol,
+.help-section ul {
+    margin: 0 0 12px 0;
+    padding-left: 20px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--ink-soft);
+}
+
+.help-section li strong {
+    color: var(--ink);
+}
+
+.help-section code {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+}
+
+.platform-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.platform-heading img {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+}
+
+.platform-heading h2 {
+    margin: 0;
+}
+
+.help-note {
+    background: var(--accent-soft);
+    color: var(--ink-soft);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 4px 0 16px 0;
+}
+
+.help-note strong {
+    color: var(--ink);
+}
+
+/* ---------- FAQ accordion ---------- */
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.faq-item {
+    border-bottom: 1px solid var(--line);
+}
+
+.faq-item:last-child {
+    border-bottom: none;
+}
+
+.faq-question {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    background: none;
+    border: none;
+    padding: 16px 2px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.faq-question:hover { color: var(--accent); }
+
+.faq-chevron {
+    width: 16px;
+    height: 16px;
+    stroke: var(--slate);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.faq-item.open .faq-chevron {
+    transform: rotate(180deg);
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.faq-item.open .faq-answer {
+    max-height: 240px;
+}
+
+.faq-answer p {
+    padding: 0 2px 16px 2px;
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    line-height: 1.7;
+}
+
+/* ---------- Contact ---------- */
+
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 11px 20px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-size: 13.5px;
+    font-weight: 600;
+    transition: background 0.15s ease;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+
+.help-placeholder-note {
+    font-size: 12px;
+    color: var(--slate);
+    margin-top: 10px;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+    .help-shell {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .help-toc {
+        position: static;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 16px;
+    }
+
+    .help-toc nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-left: none;
+        gap: 8px;
+    }
+
+    .toc-link {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 14px;
+        margin-left: 0;
+    }
+
+    .toc-link.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+    }
+
+    .help-content { padding: 4px 20px; }
+}

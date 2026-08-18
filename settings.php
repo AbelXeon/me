@@ -195,7 +195,8 @@ require_once 'includes/layout_header.php';
      alt="LinkedIn" 
      width="24" 
      height="24" 
-     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);">                        </div>
+     style="filter: invert(27%) sepia(89%) saturate(1844%) hue-rotate(178deg) brightness(91%) contrast(101%);">    
+                        </div>
                         <div>
                             <div class="platform-name">LinkedIn</div>
                             <div class="platform-status <?php echo isset($accounts['linkedin']) ? 'status-connected' : 'status-disconnected'; ?>">
