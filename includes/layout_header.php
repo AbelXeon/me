@@ -261,27 +261,6 @@
                             <?php echo htmlspecialchars($topbarTitle ?? $pageTitle); ?>
                         </h1>
 
-                        <?php if (!empty($showBackBtn)): ?>
-
-                            <a href="dashboard.php" class="back-btn">
-
-                                <svg viewBox="0 0 24 24"
-                                     fill="none"
-                                     stroke-width="2"
-                                     stroke-linecap="round"
-                                     stroke-linejoin="round">
-
-                                    <path d="M19 12H5"/>
-                                    <path d="M12 19l-7-7 7-7"/>
-
-                                </svg>
-
-                                Back to Dashboard
-
-                            </a>
-
-                        <?php endif; ?>
-
                     </div>
 
                 </div>
