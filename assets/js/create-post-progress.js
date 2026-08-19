@@ -23,34 +23,34 @@
     style.textContent = `
     .lkp-overlay {
         position: fixed;
-        inset: 0;
+        right: 18px;
+        bottom: 18px;
         z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        background: rgba(15, 17, 21, 0.55);
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
-        opacity: 0;
-        transition: opacity 0.25s ease;
+        display: none;
+        pointer-events: none;
+        max-width: calc(100vw - 36px);
     }
-    .lkp-overlay.lkp-show { opacity: 1; }
+    .lkp-overlay.lkp-show {
+        display: block;
+        pointer-events: auto;
+    }
 
     .lkp-card {
-        width: 100%;
-        max-width: 420px;
+        width: 320px;
+        max-width: 100%;
         background: var(--surface, #fff);
-        border-radius: 18px;
-        box-shadow: 0 24px 60px rgba(15, 17, 21, 0.28);
-        padding: 28px 26px 24px;
-        transform: translateY(14px) scale(0.98);
-        transition: transform 0.3s cubic-bezier(.2,.8,.2,1);
+        border-radius: 16px;
+        box-shadow: 0 14px 38px rgba(15, 17, 21, 0.22), 0 2px 8px rgba(15,17,21,0.08);
+        border: 1px solid var(--line, #ececf2);
+        padding: 18px 18px 15px;
+        transform: translateY(18px) scale(0.97);
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(.2,.8,.2,1), opacity 0.25s ease;
         font-family: 'Inter', system-ui, sans-serif;
     }
-    .lkp-overlay.lkp-show .lkp-card { transform: translateY(0) scale(1); }
+    .lkp-overlay.lkp-show .lkp-card { transform: translateY(0) scale(1); opacity: 1; }
 
-    .lkp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+    .lkp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
 
     .lkp-spinner-ring {
         width: 22px; height: 22px; flex-shrink: 0;
@@ -63,24 +63,24 @@
 
     .lkp-title {
         font-family: 'Space Grotesk', sans-serif;
-        font-size: 17px;
+        font-size: 14.5px;
         font-weight: 700;
         color: var(--ink, #14161a);
         margin: 0;
     }
     .lkp-subtitle {
-        font-size: 12.5px;
+        font-size: 11.5px;
         color: var(--slate, #6b7280);
-        margin: 3px 0 20px;
+        margin: 2px 0 14px;
         line-height: 1.4;
     }
 
     .lkp-bar-track {
-        height: 6px;
+        height: 5px;
         border-radius: 999px;
         background: var(--bg, #f2f2f7);
         overflow: hidden;
-        margin-bottom: 20px;
+        margin-bottom: 14px;
     }
     .lkp-bar-fill {
         height: 100%;
@@ -90,14 +90,20 @@
         transition: width 0.5s cubic-bezier(.2,.8,.2,1);
     }
 
-    .lkp-platform-list { display: flex; flex-direction: column; gap: 10px; }
+    .lkp-platform-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
 
     .lkp-row {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 12px;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 10px;
         background: var(--bg, #f7f7fb);
         border: 1px solid transparent;
         transition: background 0.2s ease, border-color 0.2s ease;
@@ -109,19 +115,22 @@
     .lkp-row.lkp-done { background: var(--bg, #f7f7fb); }
 
     .lkp-row-icon {
-        width: 26px; height: 26px; border-radius: 6px;
+        width: 22px; height: 22px; border-radius: 5px;
         flex-shrink: 0; object-fit: cover;
     }
 
     .lkp-row-text { flex: 1; min-width: 0; }
     .lkp-row-name {
-        font-size: 13px; font-weight: 600; color: var(--ink, #14161a);
+        font-size: 12px; font-weight: 600; color: var(--ink, #14161a);
         margin: 0 0 1px;
     }
     .lkp-row-status {
-        font-size: 11.5px; color: var(--slate, #6b7280);
+        font-size: 10.5px; color: var(--slate, #6b7280);
         margin: 0;
         transition: opacity 0.2s ease;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .lkp-row.lkp-active .lkp-row-status { color: var(--accent, #5b4fe0); font-weight: 600; }
     .lkp-row.lkp-done .lkp-row-status { color: #17a768; font-weight: 600; }
@@ -361,11 +370,7 @@
 
     /* ---------------- hook into the existing submit flow ---------------- */
     form.addEventListener('submit', function () {
-        // Runs alongside the existing compression script's own submit
-        // handler — this does not call preventDefault and does not
-        // interfere with it. The real POST request will still happen
-        // exactly as before; this only shows a visual overlay on top
-        // while the browser is waiting on that request.
+
         if (isSchedulingMode()) {
             runScheduleAnimation();
         } else {
