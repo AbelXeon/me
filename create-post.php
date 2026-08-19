@@ -708,4 +708,7 @@ require_once 'includes/layout_header.php';
     }
     </script>
 
+<script src="assets/js/create-post-progress.js"></script>
+
+
 <?php require_once 'includes/layout_footer.php'; ?>
