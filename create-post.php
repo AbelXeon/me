@@ -30,8 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $external_link = trim($_POST['external_link'] ?? '');
         $platforms = $_POST['platforms'] ?? [];
         $scheduled_at = trim($_POST['scheduled_at'] ?? '');
-        // Per-platform comments toggle. Each platform (instagram, tiktok) gets
-        // its own value in $comments_enabled_map. Defaults to enabled (1).
         $comments_enabled_map = $_POST['comments_enabled'] ?? [];
 
         if (!empty($scheduled_at)) {

@@ -11,15 +11,10 @@ if (isLoggedIn()) {
     exit();
 }
 
-// A couple of cheap, standard response headers — doesn't touch your
-// login logic, just tells the browser not to guess content types and
-// not to let this page be framed by another site (clickjacking).
+
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
-// CSRF token for the login form itself (protects against login CSRF —
-// someone tricking a logged-out visitor's browser into submitting a
-// forged login request). Same pattern already used on your other pages.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -32,11 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
     } else {
         $username = trim($_POST['username']);
         $password = $_POST['password'];
-
-        // Already safe: this is a parameterized query (PDO prepare + execute
-        // with a bound placeholder), so the username value can never be
-        // interpreted as SQL. That protection was already in place — I
-        // haven't changed how this query is built.
         $conn = getDBConnection();
         $stmt = $conn->prepare("SELECT * FROM users WHERE username = ?");
         $stmt->execute([$username]);
@@ -46,15 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
             if ($user['account_status'] === 'pending') {
                 $error = "Please verify your email before logging in.";
             } else {
-                // Regenerate the session ID on privilege change (login) to
-                // prevent session fixation attacks, then set the session
-                // exactly as before.
                 session_regenerate_id(true);
 
-                // SETTING THE SESSION CORRECTLY TO MATCH YOUR AUTH_CHECK.PHP
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
-                $_SESSION['logged_in'] = true; // THIS FIXES THE LOOP
+                $_SESSION['logged_in'] = true; 
 
                 header('Location: dashboard.php');
                 exit();
