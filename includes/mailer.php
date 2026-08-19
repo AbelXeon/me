@@ -1,36 +1,5 @@
 <?php
-/**
- * Email sending — driver-based, fully controlled via .env.
- *
- * Add to your .env:
- *
- *   MAIL_DRIVER=brevo          # or: smtp
- *
- *   # Used by BOTH drivers as the "From" address:
- *   MAIL_FROM_ADDRESS=you@example.com
- *   MAIL_FROM_NAME="Social Manager"
- *
- *   # Only needed when MAIL_DRIVER=brevo
- *   BREVO_API_KEY=xxxxx
- *
- *   # Only needed when MAIL_DRIVER=smtp (e.g. your Ethereal creds for local dev)
- *   MAIL_HOST=smtp.ethereal.email
- *   MAIL_PORT=587
- *   MAIL_USERNAME=xxxx@ethereal.email
- *   MAIL_PASSWORD=xxxxx
- *   MAIL_ENCRYPTION=tls        # tls (STARTTLS, usually port 587) or ssl (port 465)
- *
- * On Render: set MAIL_DRIVER=brevo + BREVO_API_KEY + MAIL_FROM_ADDRESS in the
- * dashboard env vars, exactly like you're already doing.
- *
- * Locally: set MAIL_DRIVER=smtp and point MAIL_HOST/USERNAME/PASSWORD at
- * Ethereal (or Mailtrap, or anything else) — nothing in the code changes.
- */
 
-/**
- * Reads an env var the same way the rest of the app does
- * (getenv -> $_ENV -> $_SERVER -> default).
- */
 function envVar($key, $default = '') {
     $value = getenv($key);
     if ($value !== false && $value !== '') return $value;
@@ -39,10 +8,6 @@ function envVar($key, $default = '') {
     return $default;
 }
 
-/**
- * Public entry point — unchanged signature, so nothing calling
- * sendCodeEmail() elsewhere in the app needs to change.
- */
 function sendCodeEmail($toEmail, $toName, $code, $purpose = 'email_verify') {
     $subject = ($purpose === 'email_verify') ? "Verify Account: $code" : "Reset Password: $code";
     $title   = ($purpose === 'email_verify') ? "Welcome to Social Manager!" : "Password Reset Request";
@@ -65,9 +30,6 @@ function sendCodeEmail($toEmail, $toName, $code, $purpose = 'email_verify') {
     return sendViaBrevo($toEmail, $toName, $subject, $htmlContent);
 }
 
-/* ============================================================
-   Driver: Brevo API  (what you already have on Render)
-   ============================================================ */
 function sendViaBrevo($toEmail, $toName, $subject, $htmlContent) {
     $apiKey = envVar('BREVO_API_KEY');
     if (empty($apiKey)) {
@@ -117,12 +79,6 @@ function sendViaBrevo($toEmail, $toName, $subject, $htmlContent) {
     return true;
 }
 
-/* ============================================================
-   Driver: plain SMTP (no libraries) — for Ethereal / local dev,
-   or any real SMTP server if you ever need one.
-   Supports STARTTLS (port 587) and implicit SSL (port 465),
-   with AUTH LOGIN.
-   ============================================================ */
 function sendViaSmtp($toEmail, $toName, $subject, $htmlContent) {
     $host       = envVar('MAIL_HOST');
     $port       = (int) envVar('MAIL_PORT', 587);
@@ -156,7 +112,7 @@ function sendViaSmtp($toEmail, $toName, $subject, $htmlContent) {
     stream_set_timeout($socket, $timeout);
 
     try {
-        smtpExpect($socket, '220'); // server greeting
+        smtpExpect($socket, '220'); 
 
         $localDomain = 'localhost';
         smtpCommand($socket, "EHLO {$localDomain}", '250');
@@ -193,7 +149,6 @@ function sendViaSmtp($toEmail, $toName, $subject, $htmlContent) {
             "Date: " . date('r'),
         ];
 
-        // Dot-stuff any line that starts with a lone "." per SMTP spec
         $body = preg_replace('/^\./m', '..', $htmlContent);
 
         $message = implode("\r\n", $boundaryHeaders) . "\r\n\r\n" . $body . "\r\n.";
@@ -212,13 +167,12 @@ function sendViaSmtp($toEmail, $toName, $subject, $htmlContent) {
     }
 }
 
-/* ---- tiny SMTP helpers (used only by sendViaSmtp) ---- */
 
 function smtpReadResponse($socket) {
     $data = '';
     while (($line = fgets($socket, 515)) !== false) {
         $data .= $line;
-        // Multi-line responses look like "250-...", final line is "250 ..."
+    
         if (isset($line[3]) && $line[3] === ' ') break;
     }
     return $data;
@@ -240,7 +194,6 @@ function smtpCommand($socket, $command, $expectedCode) {
 }
 
 function mimeEncodeHeader($text) {
-    // Simple UTF-8 header encoding, safe even for plain ASCII subjects
     return '=?UTF-8?B?' . base64_encode($text) . '?=';
 }
 

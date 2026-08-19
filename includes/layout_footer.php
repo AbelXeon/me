@@ -1,9 +1,5 @@
 <?php
-/**
- * Shared layout footer — Social Media Manager
- * Closes .main and .app-shell and renders the mobile sidebar toggle script.
- * Page-specific scripts should be included BEFORE this file.
- */
+
 ?>
         </main>
     </div>

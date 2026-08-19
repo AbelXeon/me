@@ -16,9 +16,7 @@ define('DB_NAME',   getenv('DB_NAME') ?: 'social_manager');
 define('DB_USER',   getenv('DB_USER') ?: 'root');
 define('DB_PASS',   getenv('DB_PASS') ?: '');
 
-/**
- * Creates and returns a PDO database connection
- */
+
 function getDBConnection()
 {
     try {

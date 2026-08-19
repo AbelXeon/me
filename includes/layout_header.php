@@ -1,16 +1,5 @@
 <?php
-/**
- * Shared layout header — LEYKUN Social Media Management
- *
- * Set these variables BEFORE including this file:
- *   $pageTitle   — text for the <title> tag
- *   $activeNav   — 'dashboard' | 'create-post' | 'settings' | 'post-history' | 'help-support' | 'account-settings'
- *   $pageCss     — path to the page-specific stylesheet (or '' for none)
- *   $topbarTitle — text for the topbar <h1> (defaults to $pageTitle)
- *   $showBackBtn — true to show the "Back to Dashboard" link
- *
- * Assumes auth_check.php has already been required (so getCurrentUsername() exists).
- */
+
 ?>
 <!DOCTYPE html>
 <html lang="en">

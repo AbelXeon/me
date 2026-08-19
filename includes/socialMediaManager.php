@@ -7,15 +7,12 @@ class SocialMediaManager {
     public function __construct($pdo) {
         $this->db = $pdo;
         
-        // If running from cron.php, $_ENV might be empty, so we load it
         if (!isset($_ENV['TELEGRAM_BOT_TOKEN'])) {
             require_once __DIR__ . '/env.php'; 
         }
     }
 
-    /**
-     * Main function to process a post for all selected platforms
-     */
+   
     public function sendPost($postId) {
         // 1. Fetch post details
         $stmt = $this->db->prepare("
@@ -61,7 +58,6 @@ class SocialMediaManager {
             $stmtUpdate->execute([$status, $platform_post_id, $error_message, $postId, $platform]);
         }
 
-        // Update main post status if all platforms are processed
         $stmtCheck = $this->db->prepare("SELECT COUNT(*) FROM post_platforms WHERE post_id = ? AND status = 'pending'");
         $stmtCheck->execute([$postId]);
         if ($stmtCheck->fetchColumn() == 0) {
@@ -74,9 +70,7 @@ class SocialMediaManager {
         }
     }
 
-    /**
-     * Helper to fetch all media files associated with a post (Primary + Extras)
-     */
+   
     private function getPostMediaItems($post) {
         $stmtMedia = $this->db->prepare("
             SELECT path, type FROM media_files WHERE id = ?
@@ -164,9 +158,7 @@ class SocialMediaManager {
 
 
 
-/**
- * Publishes a video to TikTok's Content Posting API v2
- */
+
 private function postToTikTok($post, &$platform_post_id, &$error_message) {
     $stmt = $this->db->prepare("SELECT id, access_token, refresh_token, token_expires_at FROM social_accounts WHERE user_id = ? AND platform = 'tiktok' AND status = 1");
     $stmt->execute([$post['user_id']]);
@@ -182,10 +174,6 @@ private function postToTikTok($post, &$platform_post_id, &$error_message) {
         return false;
     }
  
-    // TikTok access tokens expire after 24 hours (unlike LinkedIn's 60 days), so we
-    // proactively refresh whenever the stored token is expired or expiring within the
-    // next 5 minutes, using the refresh_token captured at connect-time. This keeps
-    // TikTok posting working indefinitely without the user ever reconnecting.
     $accessToken = $account['access_token'];
     $needsRefresh = true;
     if (!empty($account['token_expires_at'])) {
@@ -211,8 +199,7 @@ private function postToTikTok($post, &$platform_post_id, &$error_message) {
         $finalCaption .= "\n\n" . $post['external_link'];
     }
  
-    // Comments toggle: defaults to enabled (false = not disabled) if the
-    // column isn't present on $post yet, matching original behavior.
+    
     $commentsEnabled = !array_key_exists('comments_enabled', $post) || (bool)$post['comments_enabled'];
  
     $redirectUri = getenv('TIKTOK_REDIRECT_URI') ?: '';
@@ -259,12 +246,7 @@ private function postToTikTok($post, &$platform_post_id, &$error_message) {
     return false;
 }
  
-/**
- * Uses a stored refresh_token to obtain a fresh TikTok access token, and
- * persists the new access_token/refresh_token/expiry back to social_accounts.
- * TikTok rotates the refresh_token on every use, so the old one must be replaced too.
- * Returns the new access token on success, or null on failure.
- */
+
 private function refreshTikTokAccessToken($account) {
     $clientKey = getenv('TIKTOK_CLIENT_KEY');
     $clientSecret = getenv('TIKTOK_CLIENT_SECRET');
