@@ -1,9 +1,4 @@
-/* ============================================================
-   Platform Settings — page-specific styles
-   (shell/sidebar/topbar/alerts live in layout.css)
-   ============================================================ */
 
-/* ---------- Platform cards ---------- */
 
 .platform-card {
     background: var(--surface);
@@ -232,7 +227,6 @@
 
 .btn-danger:hover { background: #F7D3D3; }
 
-/* ---------- Responsive (page-specific) ---------- */
 
 @media (max-width: 900px) {
     .platform-header {

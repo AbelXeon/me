@@ -1,22 +1,9 @@
-/* ============================================================
-   LEYKUN — Create Post: publishing progress animation
-   ------------------------------------------------------------
-   Drop-in, self-contained. Does NOT touch existing form logic,
-   does NOT preventDefault, does NOT interfere with the image
-   compression script. It just listens to the same "submit"
-   event and shows a nice animated overlay while the real
-   (synchronous) request is in flight, since the browser sits
-   on that request until the page reloads/redirects anyway.
 
-   Include with:
-   <script src="assets/js/create-post-progress.js"></script>
-   right before includes/layout_footer.php is required.
-   ============================================================ */
 (function () {
     'use strict';
 
     const form = document.getElementById('postForm');
-    if (!form) return; // "no platforms connected" state — nothing to do
+    if (!form) return; 
 
     /* ---------------- styles (scoped, prefixed lkp-) ---------------- */
     const style = document.createElement('style');
@@ -204,9 +191,7 @@
         list: overlay.querySelector('#lkpPlatformList'),
     };
 
-    /* ---------------- helpers ---------------- */
-
-    // Rough "how long does this usually take" heuristics, purely cosmetic.
+    
     const VIDEO_TIPS = {
         instagram: ['Uploading your video…', 'Processing on Instagram…', 'Almost there…'],
         tiktok: ['Uploading your video…', 'Processing on TikTok…', 'Almost there…'],
@@ -321,12 +306,10 @@
 
         show();
 
-        // Step 0: brief "preparing media" phase
         els.barFill.style.width = '8%';
         await sleep(700);
 
         if (rows.length === 0) {
-            // shouldn't happen (form requires at least one), but be safe
             els.barFill.style.width = '95%';
             return;
         }
@@ -345,7 +328,7 @@
 
             if (isVideoPlatform) {
                 tipInterval = cycleActiveTips(row, VIDEO_TIPS[key]);
-                activeDuration = 6600; // longer, video processing feel
+                activeDuration = 6600; 
             } else {
                 activeDuration = 1900;
             }
@@ -359,16 +342,12 @@
             await sleep(250);
         }
 
-        // Final "wrapping up" indefinite phase — real request may still be
-        // finishing server-side (e.g. Instagram/TikTok processing). Stays
-        // like this until the page actually navigates away.
         els.head.classList.remove('lkp-head-done');
         els.title.textContent = 'Wrapping up';
-        els.subtitle.textContent = 'Finalizing everything — almost done…';
+        els.subtitle.textContent = 'Finalizing everything';
         els.barFill.style.width = '96%';
     }
 
-    /* ---------------- hook into the existing submit flow ---------------- */
     form.addEventListener('submit', function () {
 
         if (isSchedulingMode()) {

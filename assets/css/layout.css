@@ -1,9 +1,3 @@
-/* ============================================================
-   Shared Layout — LEYKUN Social Media Management
-   Sidebar + topbar + shell + alerts + responsive base
-   (page-specific styles live in each page's own stylesheet)
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 :root {

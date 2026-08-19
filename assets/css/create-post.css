@@ -1,10 +1,3 @@
-/* ============================================================
-   Create Post — page-specific styles
-   (shell/sidebar/topbar/alerts live in layout.css)
-   ============================================================ */
-
-/* ---------- Compose layout (two columns) ---------- */
-
 .compose-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);

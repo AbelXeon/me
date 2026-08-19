@@ -1,7 +1,4 @@
-/* ============================================================
-   Login — LEYKUN Social Media Management
-   Layout: split screen — form left, animated showcase right
-   ============================================================ */
+
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
@@ -44,14 +41,12 @@ h1, h2 {
 a { color: inherit; }
 button { font-family: inherit; }
 
-/* ---------- Shell ---------- */
 
 .login-shell {
     display: flex;
     min-height: 100vh;
 }
 
-/* ---------- Left: form panel ---------- */
 
 .login-panel {
     flex: 1;
