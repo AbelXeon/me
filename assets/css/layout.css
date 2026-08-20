@@ -116,6 +116,10 @@ button { font-family: inherit; }
     padding: 18px 12px 8px 12px;
 }
 
+.sidebar-section-label:first-of-type {
+    padding-top: 8px;
+}
+
 .nav-list {
     list-style: none;
     margin: 0;

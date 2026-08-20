@@ -62,7 +62,7 @@
             </div>
 
 
-            <div class="sidebar-section-label">Menu</div>
+            <div class="sidebar-section-label">Main</div>
 
             <ul class="nav-list">
 
@@ -110,28 +110,6 @@
                 </li>
 
 
-                <!-- ===================== PLATFORM SETTINGS ===================== -->
-                <li>
-                    <a href="settings.php"
-                       class="nav-item <?php echo ($activeNav ?? '') === 'settings' ? 'active' : ''; ?>">
-
-                        <svg viewBox="0 0 24 24"
-                             fill="none"
-                             stroke-width="2"
-                             stroke-linecap="round"
-                             stroke-linejoin="round">
-
-                            <circle cx="12" cy="12" r="3"/>
-
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-
-                        </svg>
-
-                        Platform Settings
-                    </a>
-                </li>
-
-
                 <!-- ===================== POST HISTORY ===================== -->
                 <li>
                     <a href="post-history.php"
@@ -154,11 +132,16 @@
                     </a>
                 </li>
 
+            </ul>
 
-                <!-- ===================== HELP & SUPPORT ===================== -->
+            <div class="sidebar-section-label">Settings</div>
+
+            <ul class="nav-list">
+
+                <!-- ===================== PLATFORM SETTINGS ===================== -->
                 <li>
-                    <a href="help-support.php"
-                       class="nav-item <?php echo ($activeNav ?? '') === 'help-support' ? 'active' : ''; ?>">
+                    <a href="settings.php"
+                       class="nav-item <?php echo ($activeNav ?? '') === 'settings' ? 'active' : ''; ?>">
 
                         <svg viewBox="0 0 24 24"
                              fill="none"
@@ -166,15 +149,13 @@
                              stroke-linecap="round"
                              stroke-linejoin="round">
 
-                            <circle cx="12" cy="12" r="9"/>
+                            <circle cx="12" cy="12" r="3"/>
 
-                            <path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c-.8.8-2 1.2-2 2.5"/>
-
-                            <path d="M12 17h.01"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
 
                         </svg>
 
-                        Help &amp; Support
+                        Platform Settings
                     </a>
                 </li>
 
@@ -196,6 +177,35 @@
                         </svg>
 
                         Account Settings
+                    </a>
+                </li>
+
+            </ul>
+
+            <div class="sidebar-section-label">Support</div>
+
+            <ul class="nav-list">
+
+                <!-- ===================== HELP & SUPPORT ===================== -->
+                <li>
+                    <a href="help-support.php"
+                       class="nav-item <?php echo ($activeNav ?? '') === 'help-support' ? 'active' : ''; ?>">
+
+                        <svg viewBox="0 0 24 24"
+                             fill="none"
+                             stroke-width="2"
+                             stroke-linecap="round"
+                             stroke-linejoin="round">
+
+                            <circle cx="12" cy="12" r="9"/>
+
+                            <path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c-.8.8-2 1.2-2 2.5"/>
+
+                            <path d="M12 17h.01"/>
+
+                        </svg>
+
+                        Help &amp; Support
                     </a>
                 </li>
 
