@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$media_type) throw new Exception("File " . ($i+1) . " is not supported.");
 
                     $ext = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
-                    
+
                     // If image was compressed client-side, force save as jpg [1.1.2]
                     if ($media_type === 'image') {
                         $ext = 'jpg';
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (move_uploaded_file($files['tmp_name'][$i], $upload_dir . $new_filename)) {
                         $relative_path = 'uploads/posts/' . $new_filename;
                         chmod($upload_dir . $new_filename, 0644); 
-                        
+
                         $stmt = $conn->prepare("INSERT INTO media_files (path, type, size, mime_type, uploaded_by) VALUES (?, ?, ?, ?, ?)");
                         $stmt->execute([$relative_path, $media_type, $files['size'][$i], $detected_mime, $user_id]);
                         $uploaded_media_ids[] = $conn->lastInsertId();
@@ -187,19 +187,6 @@ require_once 'includes/layout_header.php';
                         <div class="compose-main">
                             <div class="form-card">
                                 <div class="form-group">
-                                    <label for="caption">Caption</label>
-                                    <textarea id="caption" name="caption" rows="5" required placeholder="Write something worth posting..."><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="external_link">Links (Optional)</label>
-                                    <textarea id="external_link" name="external_link" rows="2" placeholder="Paste links here (one per line)"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
-                                    <small>Links will be appended to the end of the post.</small>
-                                </div>
-                            </div>
-
-                            <div class="form-card">
-                                <div class="form-group">
                                     <label for="mediaInput">Media</label>
 
                                     <input type="file" id="mediaInput" name="media[]" accept="image/*,video/*" multiple required class="file-input-hidden">
@@ -217,6 +204,18 @@ require_once 'includes/layout_header.php';
                                     </div>
 
                                     <div class="media-preview-grid" id="mediaPreviewGrid"></div>
+                                </div>
+                            </div>
+
+                            <div class="form-card">
+                                <div class="form-group">
+                                    <label for="caption">Caption</label>
+                                    <textarea id="caption" name="caption" rows="5" required placeholder="Write something..."><?php echo htmlspecialchars($_POST['caption'] ?? ''); ?></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="external_link">Links</label>
+                                    <textarea id="external_link" name="external_link" rows="2" placeholder="#Example"><?php echo htmlspecialchars($_POST['external_link'] ?? ''); ?></textarea>
                                 </div>
                             </div>
                         </div>
@@ -619,7 +618,7 @@ require_once 'includes/layout_header.php';
         if (!fileInput.files.length) return;
 
         e.preventDefault();
-        
+
         const submitBtn = this.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
         submitBtn.innerText = "Compressing & Uploading...";
@@ -628,7 +627,7 @@ require_once 'includes/layout_header.php';
 
         for (let i = 0; i < fileInput.files.length; i++) {
             const file = fileInput.files[i];
-            
+
             if (file.type.startsWith('image/')) {
                 try {
                     const compressedImage = await compressImage(file, 1024, 0.7);
